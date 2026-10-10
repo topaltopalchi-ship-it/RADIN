@@ -103,7 +103,23 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
                         override fun onEndOfSpeech() {}
                         override fun onError(error: Int) { scheduleListening(900) }
                         override fun onResults(results: Bundle?) {
-                            val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                            val candidates = results
+                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                .orEmpty()
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                            // Recognition engines can return several hypotheses. While waiting
+                            // for the wake word, prefer a candidate that actually contains it.
+                            // For the user's contact command, keep the engine's top candidate.
+                            val wakeWords = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
+                            val phrase = if (awaitingCommand) {
+                                candidates.firstOrNull().orEmpty()
+                            } else {
+                                candidates.firstOrNull { candidate ->
+                                    val normalized = candidate.lowercase(Locale.ROOT)
+                                    wakeWords.any { normalized.contains(it) }
+                                } ?: candidates.firstOrNull().orEmpty()
+                            }
                             handlePhrase(phrase)
                             scheduleListening(150)
                         }
