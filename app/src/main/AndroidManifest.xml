@@ -25,6 +25,12 @@
                 <data android:scheme="tel" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".YoldashInCallActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
         <service
             android:name=".YoldashWakeService"
             android:exported="false"
@@ -33,7 +39,7 @@
             android:name=".YoldashInCallService"
             android:permission="android.permission.BIND_INCALL_SERVICE"
             android:exported="true">
-            <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="false" />
+            <meta-data android:name="android.telecom.IN_CALL_SERVICE_UI" android:value="true" />
             <meta-data android:name="android.telecom.IN_CALL_SERVICE_RINGING" android:value="false" />
             <intent-filter>
                 <action android:name="android.telecom.InCallService" />
