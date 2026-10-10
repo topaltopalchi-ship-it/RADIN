@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        handleDialIntent(intent)
         requestNeededPermissions()
     }
 
@@ -93,6 +94,26 @@ class MainActivity : Activity() {
             ).apply { bottomMargin = 10 })
         }
         setContentView(root)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDialIntent(intent)
+    }
+
+    private fun handleDialIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_DIAL) {
+            val number = intent.data?.schemeSpecificPart?.trim().orEmpty()
+            if (number.isNotBlank()) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("تأیید تماس")
+                    .setMessage("با شماره $number تماس گرفته شود؟")
+                    .setPositiveButton("تماس") { _, _ -> dial(number) }
+                    .setNegativeButton("لغو", null)
+                    .show()
+            }
+        }
     }
 
     private fun requestDefaultDialerRole() {
