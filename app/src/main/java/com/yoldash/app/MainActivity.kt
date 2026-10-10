@@ -221,6 +221,13 @@ class MainActivity : Activity() {
                 }
             }
         }
+        val caseEndings = listOf("ya", "yə", "a", "ə")
+        for (ending in caseEndings) {
+            if (query.lowercase(Locale.ROOT).endsWith(ending) && query.length > ending.length + 1) {
+                query = query.dropLast(ending.length)
+                break
+            }
+        }
         return query.ifBlank { command.trim() }
     }
 
