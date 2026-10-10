@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SIGNING_CONFIGURED: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' && secrets.SIGNING_KEY_ALIAS != '' && secrets.SIGNING_KEY_PASSWORD != '' && secrets.SIGNING_STORE_PASSWORD != '' }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -34,7 +36,7 @@ jobs:
           if-no-files-found: error
 
       - name: Prepare release signing key
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' && secrets.SIGNING_KEY_ALIAS != '' && secrets.SIGNING_KEY_PASSWORD != '' && secrets.SIGNING_STORE_PASSWORD != '' }}
+        if: env.SIGNING_CONFIGURED == 'true'
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
         run: |
@@ -42,7 +44,7 @@ jobs:
           test -s "$RUNNER_TEMP/yoldash-release.jks"
 
       - name: Build signed release APK
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' && secrets.SIGNING_KEY_ALIAS != '' && secrets.SIGNING_KEY_PASSWORD != '' && secrets.SIGNING_STORE_PASSWORD != '' }}
+        if: env.SIGNING_CONFIGURED == 'true'
         env:
           SIGNING_STORE_FILE: ${{ runner.temp }}/yoldash-release.jks
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
@@ -51,7 +53,7 @@ jobs:
         run: gradle --no-daemon assembleRelease
 
       - name: Upload signed release APK
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' && secrets.SIGNING_KEY_ALIAS != '' && secrets.SIGNING_KEY_PASSWORD != '' && secrets.SIGNING_STORE_PASSWORD != '' }}
+        if: env.SIGNING_CONFIGURED == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Yoldash-signed-release-apk
@@ -59,5 +61,5 @@ jobs:
           if-no-files-found: error
 
       - name: Explain release signing setup
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 == '' || secrets.SIGNING_KEY_ALIAS == '' || secrets.SIGNING_KEY_PASSWORD == '' || secrets.SIGNING_STORE_PASSWORD == '' }}
+        if: env.SIGNING_CONFIGURED != 'true'
         run: echo "Release APK not built: configure the four signing secrets in GitHub repository settings."
