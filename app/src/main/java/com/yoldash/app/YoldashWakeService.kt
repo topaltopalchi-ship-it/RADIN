@@ -127,11 +127,21 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         val wake = listOf("yoldaş", "yoldash", "yoldas", "یولداش").any { normalized.contains(it) }
         if (wake) {
             awaitingCommand = true
+            sendRecognizedPhrase(phrase)
             speak("Buyur, səni dinləyirəm.")
         } else if (awaitingCommand) {
+            sendRecognizedPhrase(phrase)
             speak("Səni eşitdim. Kontaktlara baxmaq və zəng etmək üçün telefonu aç və Yoldaşı aç.")
             awaitingCommand = false
         }
+    }
+
+    private fun sendRecognizedPhrase(phrase: String) {
+        val intent = Intent(ACTION_RECOGNIZED).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_PHRASE, phrase)
+        }
+        sendBroadcast(intent)
     }
 
     private fun speak(message: String) {
@@ -160,6 +170,8 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     companion object {
         const val ACTION_START = "com.yoldash.app.action.START_WAKE"
         const val ACTION_STOP = "com.yoldash.app.action.STOP_WAKE"
+        const val ACTION_RECOGNIZED = "com.yoldash.app.action.RECOGNIZED_PHRASE"
+        const val EXTRA_PHRASE = "com.yoldash.app.extra.PHRASE"
         private const val CHANNEL_ID = "yoldash_wake_service"
         private const val NOTIFICATION_ID = 601
     }
