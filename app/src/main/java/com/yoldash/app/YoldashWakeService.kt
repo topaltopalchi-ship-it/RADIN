@@ -25,6 +25,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private var ttsReady = false
     private var listening = false
     private var awaitingCommand = false
+    @Volatile private var active = true
 
     override fun onCreate() {
         super.onCreate()
@@ -33,6 +34,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        active = true
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
@@ -139,10 +141,11 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private fun scheduleListening(delayMs: Long) {
         listening = false
         handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ if (!isStopped) beginRecognition() }, delayMs)
+        handler.postDelayed({ if (active) beginRecognition() }, delayMs)
     }
 
     override fun onDestroy() {
+        active = false
         handler.removeCallbacksAndMessages(null)
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
         recognizer = null
