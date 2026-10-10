@@ -73,7 +73,7 @@ class MainActivity : Activity() {
             setOnClickListener { if (wakeMode) stopWakeListening() else startWakeListening() }
         }
         status = TextView(this).apply {
-            text = "نام مخاطب را تایپ کنید، یا بیدارباش را فعال کنید و بگویید «یولداش». برای شنیدن پیوسته، برنامه باید باز بماند."
+            text = "Bидارباشı aktiv edin və «Yoldaş» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
             textSize = 16f
             setPadding(0, 24, 0, 16)
         }
@@ -108,7 +108,7 @@ class MainActivity : Activity() {
                         override fun onReadyForSpeech(params: Bundle?) {
                             if (wakeMode) status.text = if (awaitingContactName)
                                 "یولداش گوش می‌دهد؛ حالا نام مخاطب را بگویید."
-                            else "یولداش گوش می‌دهد؛ نام «یولداش» را بگویید."
+                            else "Yoldaş dinləyir; «Yoldaş» deyin."
                         }
                         override fun onBeginningOfSpeech() {}
                         override fun onRmsChanged(rmsdB: Float) {}
@@ -132,7 +132,7 @@ class MainActivity : Activity() {
             wakeMode = true
             awaitingContactName = false
             voiceButton.text = "⏹ خاموش‌کردن بیدارباش"
-            status.text = "برای شروع، بگویید «یولداش». برنامه باید باز بماند."
+            status.text = "«Yoldaş» deyin. Sonra kontaktın adını və əmri Azərbaycan türkcəsində söyləyin."
             startRecognizerListening()
         } catch (_: Exception) {
             stopWakeListening()
@@ -145,7 +145,7 @@ class MainActivity : Activity() {
         try {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "az-AZ")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             }
@@ -168,29 +168,60 @@ class MainActivity : Activity() {
             return
         }
         val normalized = spoken.lowercase(Locale.ROOT)
-        val wakeWords = listOf("یولداش", "یولداش", "yoldash", "yoldaş", "yoldas")
+        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
         if (!awaitingContactName) {
             val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
             if (wakeWord != null) {
                 val remainder = spoken.substringAfter(wakeWord, "").trim()
-                    .removePrefix("به ").removeSuffix(" زنگ بزن").removeSuffix(" تماس بگیر").trim()
                 if (remainder.isNotBlank()) {
+                    val query = extractContactQuery(remainder)
                     stopWakeListening()
-                    nameInput.setText(remainder)
-                    searchContact(remainder)
+                    nameInput.setText(query)
+                    searchContact(query)
                 } else {
                     awaitingContactName = true
-                    status.text = "بله، گوش می‌دهم؛ حالا نام مخاطب را بگویید."
-                    scheduleNextListening(500)
+                    status.text = "Bəli, eşidirəm. İndi deyin: məsələn, «Əhmədə zəng elə»."
+                    scheduleNextListening(400)
                 }
             } else {
                 scheduleNextListening(400)
             }
         } else {
+            val query = extractContactQuery(spoken)
             stopWakeListening()
-            nameInput.setText(spoken)
-            searchContact(spoken)
+            nameInput.setText(query)
+            searchContact(query)
         }
+    }
+
+    private fun extractContactQuery(command: String): String {
+        var query = command.trim().trimEnd('.', ',', '!', '?')
+        val prefixes = listOf(
+            "mənə ", "mene ", "xahiş edirəm ", "xahis edirem ",
+            "zəhmət olmasa ", "zehmet olmasa ", "please "
+        )
+        prefixes.forEach { prefix ->
+            if (query.lowercase(Locale.ROOT).startsWith(prefix)) {
+                query = query.substring(prefix.length).trim()
+            }
+        }
+        val suffixes = listOf(
+            " zəng elə", " zəng ele", " zəng et", " zəng vur",
+            " zəng edin", " telefon et", " zənglə", " zəngle",
+            " ara", " arayın", " arayin", " zəng etsin",
+            " call", " telefon aç", " telefon ac"
+        )
+        var changed = true
+        while (changed) {
+            changed = false
+            suffixes.forEach { suffix ->
+                if (query.lowercase(Locale.ROOT).endsWith(suffix)) {
+                    query = query.dropLast(suffix.length).trim()
+                    changed = true
+                }
+            }
+        }
+        return query.ifBlank { command.trim() }
     }
 
     private fun stopWakeListening() {
