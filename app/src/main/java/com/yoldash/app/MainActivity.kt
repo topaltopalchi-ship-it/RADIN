@@ -10,8 +10,6 @@ import android.telecom.TelecomManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.ContactsContract
 import android.view.Gravity
 import android.view.ViewGroup
@@ -20,7 +18,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import java.util.Locale
 
 class MainActivity : Activity() {
     private lateinit var nameInput: EditText
@@ -152,94 +149,6 @@ class MainActivity : Activity() {
             wakeMode = false
             status.text = "شروع بیدارباش ممکن نشد. مجوز میکروفون و تنظیمات باتری را بررسی کنید."
         }
-    }
-
-    private fun handleWakeSpeech(spoken: String) {
-        if (spoken.isBlank()) {
-            scheduleNextListening(500)
-            return
-        }
-        val normalized = spoken.lowercase(Locale.ROOT)
-        val normalizedAscii = normalized.replace('ə', 'e')
-        if (normalizedAscii.contains("dinamiki ac") || normalized.contains("dinamiki aç") ||
-            normalizedAscii.contains("sesguclendiriciye ver") || normalizedAscii.contains("speaker on") ||
-            normalizedAscii.contains("loudspeaker on")) {
-            val ok = YoldashInCallService.setSpeakerphone(true)
-            status.text = if (ok) "بلندگوی تماس روشن شد." else
-                "تماس فعالی برای کنترل بلندگو پیدا نشد؛ هنگام تماس دوباره فرمان بدهید."
-            scheduleNextListening(700)
-            return
-        }
-        if (normalizedAscii.contains("dinamiki bagla") || normalized.contains("dinamiki bağla") ||
-            normalizedAscii.contains("speaker off") || normalizedAscii.contains("loudspeaker off") ||
-            normalizedAscii.contains("qulaqliga kec")) {
-            val ok = YoldashInCallService.setSpeakerphone(false)
-            status.text = if (ok) "بلندگوی تماس خاموش شد." else
-                "تماس فعالی برای کنترل مسیر صدا پیدا نشد."
-            scheduleNextListening(700)
-            return
-        }
-        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
-        if (!awaitingContactName) {
-            val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
-            if (wakeWord != null) {
-                val remainder = spoken.substringAfter(wakeWord, "").trim()
-                if (remainder.isNotBlank()) {
-                    val query = extractContactQuery(remainder)
-                    stopWakeListening()
-                    nameInput.setText(query)
-                    searchContact(query)
-                } else {
-                    awaitingContactName = true
-                    status.text = "Bəli, eşidirəm. İndi deyin: məsələn, «Əhmədə zəng elə»."
-                    scheduleNextListening(400)
-                }
-            } else {
-                scheduleNextListening(400)
-            }
-        } else {
-            val query = extractContactQuery(spoken)
-            stopWakeListening()
-            nameInput.setText(query)
-            searchContact(query)
-        }
-    }
-
-    private fun extractContactQuery(command: String): String {
-        var query = command.trim().trimEnd('.', ',', '!', '?')
-        val prefixes = listOf(
-            "mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ",
-            "zəhmət olmasa ", "zehmet olmasa ", "please "
-        )
-        prefixes.forEach { prefix ->
-            if (query.lowercase(Locale.ROOT).startsWith(prefix)) {
-                query = query.substring(prefix.length).trim()
-            }
-        }
-        val suffixes = listOf(
-            " zəng elə", " zəng ele", " zəng at", " zəng et", " zəng vur",
-            " zəng edin", " telefon et", " zənglə", " zəngle",
-            " ara", " arayın", " arayin", " tut mənə", " tut mene", " zəng etsin",
-            " call", " telefon aç", " telefon ac"
-        )
-        var changed = true
-        while (changed) {
-            changed = false
-            suffixes.forEach { suffix ->
-                if (query.lowercase(Locale.ROOT).endsWith(suffix)) {
-                    query = query.dropLast(suffix.length).trim()
-                    changed = true
-                }
-            }
-        }
-        val caseEndings = listOf("ya", "yə", "a", "ə")
-        for (ending in caseEndings) {
-            if (query.lowercase(Locale.ROOT).endsWith(ending) && query.length > ending.length + 1) {
-                query = query.dropLast(ending.length)
-                break
-            }
-        }
-        return query.ifBlank { command.trim() }
     }
 
     private fun stopWakeListening() {
