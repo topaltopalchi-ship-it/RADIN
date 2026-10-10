@@ -4,6 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.role.RoleManager
+import android.os.Build
+import android.telecom.TelecomManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
@@ -27,6 +30,8 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var searchButton: Button
     private lateinit var voiceButton: Button
+    private lateinit var dialerRoleButton: Button
+    private var pendingCallNumber: String? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeMode = false
@@ -72,18 +77,38 @@ class MainActivity : Activity() {
             text = "🎙 فعال‌کردن بیدارباش «یولداش»"
             setOnClickListener { if (wakeMode) stopWakeListening() else startWakeListening() }
         }
+        dialerRoleButton = Button(this).apply {
+            text = "تنظیم یولداش به‌عنوان تلفن پیش‌فرض"
+            setOnClickListener { requestDefaultDialerRole() }
+        }
         status = TextView(this).apply {
             text = "Bидارباشı aktiv edin və «Yoldaş» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
             textSize = 16f
             setPadding(0, 24, 0, 16)
         }
-        listOf(title, subtitle, nameInput, searchButton, voiceButton, status).forEach {
+        listOf(title, subtitle, nameInput, searchButton, voiceButton, dialerRoleButton, status).forEach {
             root.addView(it, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 10 })
         }
         setContentView(root)
+    }
+
+    private fun requestDefaultDialerRole() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roleManager = getSystemService(RoleManager::class.java)
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) &&
+                !roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                startActivityForResult(roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER), 44)
+            } else if (roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                status.text = "یولداش از قبل برنامه تلفن پیش‌فرض است."
+            } else {
+                status.text = "نقش تلفن پیش‌فرض در این گوشی در دسترس نیست."
+            }
+        } else {
+            status.text = "برای تنظیم تلفن پیش‌فرض، نسخه اندروید این گوشی نیاز به بررسی دارد."
+        }
     }
 
     private fun requestNeededPermissions() {
@@ -168,6 +193,25 @@ class MainActivity : Activity() {
             return
         }
         val normalized = spoken.lowercase(Locale.ROOT)
+        val normalizedAscii = normalized.replace('ə', 'e')
+        if (normalizedAscii.contains("dinamiki ac") || normalized.contains("dinamiki aç") ||
+            normalizedAscii.contains("sesguclendiriciye ver") || normalizedAscii.contains("speaker on") ||
+            normalizedAscii.contains("loudspeaker on")) {
+            val ok = YoldashInCallService.setSpeakerphone(true)
+            status.text = if (ok) "بلندگوی تماس روشن شد." else
+                "تماس فعالی برای کنترل بلندگو پیدا نشد؛ هنگام تماس دوباره فرمان بدهید."
+            scheduleNextListening(700)
+            return
+        }
+        if (normalizedAscii.contains("dinamiki bagla") || normalized.contains("dinamiki bağla") ||
+            normalizedAscii.contains("speaker off") || normalizedAscii.contains("loudspeaker off") ||
+            normalizedAscii.contains("qulaqliga kec")) {
+            val ok = YoldashInCallService.setSpeakerphone(false)
+            status.text = if (ok) "بلندگوی تماس خاموش شد." else
+                "تماس فعالی برای کنترل مسیر صدا پیدا نشد."
+            scheduleNextListening(700)
+            return
+        }
         val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
         if (!awaitingContactName) {
             val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
@@ -311,9 +355,22 @@ class MainActivity : Activity() {
 
     private fun dial(number: String) {
         try {
-            startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
+            val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                getSystemService(RoleManager::class.java) else null
+            val isDefaultDialer = roleManager?.isRoleHeld(RoleManager.ROLE_DIALER) == true
+            if (isDefaultDialer) {
+                if (checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                    pendingCallNumber = number
+                    requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 45)
+                    return
+                }
+                getSystemService(TelecomManager::class.java)
+                    .placeCall(Uri.parse("tel:" + Uri.encode(number)), Bundle())
+            } else {
+                startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
+            }
         } catch (_: Exception) {
-            Toast.makeText(this, "باز کردن شماره‌گیر ممکن نشد.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "شروع تماس ممکن نشد؛ شماره را در شماره‌گیر بررسی کنید.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -323,6 +380,20 @@ class MainActivity : Activity() {
             startWakeListening()
         } else if (requestCode == contactsPermissionRequest && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
             status.text = "برای پیدا کردن مخاطب، اجازه مخاطبین لازم است."
+        } else if (requestCode == 45) {
+            val number = pendingCallNumber
+            pendingCallNumber = null
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && number != null) {
+                dial(number)
+            } else {
+                status.text = "برای شروع تماس از داخل یولداش، اجازه تماس لازم است."
+            }
+        } else if (requestCode == 44) {
+            val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                getSystemService(RoleManager::class.java) else null
+            status.text = if (roleManager?.isRoleHeld(RoleManager.ROLE_DIALER) == true)
+                "یولداش تلفن پیش‌فرض شد. اکنون تماس‌ها از طریق سرویس تماس یولداش قابل مدیریت‌اند."
+            else "درخواست تلفن پیش‌فرض پذیرفته نشد؛ برنامه فعلی بدون این نقش کار می‌کند."
         }
     }
 }
