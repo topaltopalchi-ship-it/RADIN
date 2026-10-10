@@ -197,7 +197,7 @@ class MainActivity : Activity() {
     private fun extractContactQuery(command: String): String {
         var query = command.trim().trimEnd('.', ',', '!', '?')
         val prefixes = listOf(
-            "mənə ", "mene ", "xahiş edirəm ", "xahis edirem ",
+            "mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ",
             "zəhmət olmasa ", "zehmet olmasa ", "please "
         )
         prefixes.forEach { prefix ->
@@ -206,9 +206,9 @@ class MainActivity : Activity() {
             }
         }
         val suffixes = listOf(
-            " zəng elə", " zəng ele", " zəng et", " zəng vur",
+            " zəng elə", " zəng ele", " zəng at", " zəng et", " zəng vur",
             " zəng edin", " telefon et", " zənglə", " zəngle",
-            " ara", " arayın", " arayin", " zəng etsin",
+            " ara", " arayın", " arayin", " tut mənə", " tut mene", " zəng etsin",
             " call", " telefon aç", " telefon ac"
         )
         var changed = true
