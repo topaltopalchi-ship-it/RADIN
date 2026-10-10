@@ -5,8 +5,6 @@ import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.CallEndpoint
 import android.telecom.InCallService
-import android.telecom.CallEndpointException
-import android.os.OutcomeReceiver
 
 class YoldashInCallService : InCallService() {
     override fun onCallAdded(call: Call) {
@@ -42,10 +40,7 @@ class YoldashInCallService : InCallService() {
                 if (Build.VERSION.SDK_INT >= 34) {
                     val wantedType = if (enabled) CallEndpoint.TYPE_SPEAKER else CallEndpoint.TYPE_EARPIECE
                     val endpoint = endpoints.firstOrNull { it.endpointType == wantedType } ?: return false
-                    service.requestCallEndpointChange(endpoint, service.mainExecutor, object : OutcomeReceiver<Void, CallEndpointException> {
-                        override fun onResult(result: Void?) {}
-                        override fun onError(error: CallEndpointException) {}
-                    })
+                    service.requestCallEndpointChange(endpoint, service.mainExecutor) { _: Void? -> }
                     true
                 } else {
                     val route = if (enabled) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE
