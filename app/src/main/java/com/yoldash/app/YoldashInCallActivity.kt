@@ -1,4 +1,4 @@
-package com.yoldash
+package com.yoldash.app
 
 import android.app.Activity
 import android.os.Bundle
