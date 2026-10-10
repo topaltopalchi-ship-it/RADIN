@@ -13,9 +13,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.RecognitionListener
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -32,8 +29,6 @@ class MainActivity : Activity() {
     private lateinit var voiceButton: Button
     private lateinit var dialerRoleButton: Button
     private var pendingCallNumber: String? = null
-    private var speechRecognizer: SpeechRecognizer? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeMode = false
     private var awaitingContactName = false
     private val contactsPermissionRequest = 42
@@ -143,69 +138,20 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), audioPermissionRequest)
             return
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.text = "تشخیص گفتار در این گوشی در دسترس نیست؛ می‌توانید نام را تایپ کنید."
-            return
-        }
         try {
-            if (speechRecognizer == null) {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { recognizer ->
-                    recognizer.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {
-                            if (wakeMode) status.text = if (awaitingContactName)
-                                "یولداش گوش می‌دهد؛ حالا نام مخاطب را بگویید."
-                            else "Yoldaş dinləyir; «Yoldaş» deyin."
-                        }
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) {
-                            if (wakeMode) scheduleNextListening(700)
-                        }
-                        override fun onResults(results: Bundle?) {
-                            if (!wakeMode) return
-                            val spoken = results
-                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                ?.firstOrNull()?.trim().orEmpty()
-                            handleWakeSpeech(spoken)
-                        }
-                        override fun onPartialResults(partialResults: Bundle?) {}
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
-                }
+            val serviceIntent = Intent(this, YoldashWakeService::class.java).apply {
+                action = YoldashWakeService.ACTION_START
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+            else startService(serviceIntent)
             wakeMode = true
             awaitingContactName = false
             voiceButton.text = "⏹ خاموش‌کردن بیدارباش"
-            status.text = "«Yoldaş» deyin. Sonra kontaktın adını və əmri Azərbaycan türkcəsində söyləyin."
-            startRecognizerListening()
+            status.text = "بیدارباش پس‌زمینه فعال شد. حتی با قفل صفحه، «یولداش» را بگویید."
         } catch (_: Exception) {
-            stopWakeListening()
-            status.text = "فعال‌کردن میکروفون ممکن نشد؛ نام را تایپ کنید."
+            wakeMode = false
+            status.text = "شروع بیدارباش ممکن نشد. مجوز میکروفون و تنظیمات باتری را بررسی کنید."
         }
-    }
-
-    private fun startRecognizerListening() {
-        if (!wakeMode) return
-        try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "az-AZ")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            }
-            speechRecognizer?.startListening(intent)
-        } catch (_: Exception) {
-            scheduleNextListening(1000)
-        }
-    }
-
-    private fun scheduleNextListening(delayMs: Long) {
-        mainHandler.removeCallbacksAndMessages(null)
-        mainHandler.postDelayed({
-            if (wakeMode) startRecognizerListening()
-        }, delayMs)
     }
 
     private fun handleWakeSpeech(spoken: String) {
@@ -299,18 +245,12 @@ class MainActivity : Activity() {
     private fun stopWakeListening() {
         wakeMode = false
         awaitingContactName = false
-        mainHandler.removeCallbacksAndMessages(null)
-        try {
-            speechRecognizer?.cancel()
-            speechRecognizer?.destroy()
-        } catch (_: Exception) {}
-        speechRecognizer = null
+        try { stopService(Intent(this, YoldashWakeService::class.java)) } catch (_: Exception) {}
         if (::voiceButton.isInitialized) voiceButton.text = "🎙 فعال‌کردن بیدارباش «یولداش»"
         if (::status.isInitialized) status.text = "بیدارباش خاموش است. برای شروع دوباره، دکمه میکروفون را بزنید."
     }
 
     override fun onDestroy() {
-        stopWakeListening()
         super.onDestroy()
     }
 
