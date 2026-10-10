@@ -146,7 +146,8 @@ class MainActivity : Activity() {
         val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
-            val remainder = phrase.substringAfter(wakeWord, "").trim()
+            val wakeIndex = phrase.indexOf(wakeWord, ignoreCase = true)
+            val remainder = if (wakeIndex >= 0) phrase.substring(wakeIndex + wakeWord.length).trim() else ""
             if (remainder.isNotBlank()) {
                 val query = extractContactQuery(remainder)
                 nameInput.setText(query)
@@ -172,9 +173,15 @@ class MainActivity : Activity() {
                 query = query.substring(prefix.length).trim()
             }
         }
-        val suffixes = listOf(" zəng elə", " zəng ele", " zəng at", " zəng et", " zəng vur",
-            " zəng edin", " telefon et", " zənglə", " zəngle", " ara", " arayın", " arayin",
-            " tut mənə", " tut mene", " zəng etsin", " call", " telefon aç", " telefon ac")
+        val suffixes = listOf(
+            " mənə zəng elə", " mene zəng ele", " mənə zəng et", " mene zəng et",
+            " ilə zəng elə", " ile zəng ele", " ilə zəng et", " ile zəng et",
+            " ilə zəng vur", " ile zəng vur", " zəng elə", " zəng ele",
+            " zəng at", " zəng et", " zəng vur", " zəng edin", " zəng eləyin",
+            " zəng eleyn", " telefon et", " zənglə", " zəngle", " arayın",
+            " arayin", " ara", " tut mənə", " tut mene", " zəng etsin",
+            " call", " telefon aç", " telefon ac", " yığ", " yig"
+        )
         var changed = true
         while (changed) {
             changed = false
