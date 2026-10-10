@@ -266,41 +266,72 @@ class MainActivity : Activity() {
             requestNeededPermissions()
             return
         }
-        val matches = mutableListOf<Pair<String, String>>()
-        var cursor: Cursor? = null
+        val allContacts = mutableListOf<Pair<String, String>>()
         try {
-            cursor = contentResolver.query(
+            contentResolver.query(
                 ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                 arrayOf(
                     ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                     ContactsContract.CommonDataKinds.Phone.NUMBER
                 ),
-                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?",
-                arrayOf("%$query%"),
+                null,
+                null,
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-            )
-            cursor?.use {
-                while (it.moveToNext() && matches.size < 8) {
-                    val name = it.getString(0) ?: continue
-                    val number = it.getString(1) ?: continue
-                    if (matches.none { entry -> entry.second == number }) matches.add(name to number)
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(0) ?: continue
+                    val number = cursor.getString(1) ?: continue
+                    if (allContacts.none { it.first == name && it.second == number }) {
+                        allContacts.add(name to number)
+                    }
                 }
             }
         } catch (_: SecurityException) {
             status.text = "دسترسی به مخاطبین مجاز نیست."
             return
         }
-        if (matches.isEmpty()) {
-            status.text = "مخاطبی با نام «$query» پیدا نشد."
+
+        fun normalize(value: String): String = value.lowercase(Locale.ROOT)
+            .replace('ə', 'e').replace('ı', 'i').replace('ö', 'o')
+            .replace('ü', 'u').replace('ş', 's').replace('ç', 'c')
+            .replace('ğ', 'g')
+            .filter { it.isLetterOrDigit() }
+
+        val wanted = normalize(query)
+        val ranked = allContacts.map { contact ->
+            val normalizedName = normalize(contact.first)
+            val score = when {
+                normalizedName == wanted -> 100
+                normalizedName.startsWith(wanted) -> 80
+                normalizedName.split(Regex("\\s+")).any { it == wanted } -> 75
+                normalizedName.contains(wanted) -> 60
+                wanted.length >= 3 && normalizedName.split(Regex("\\s+")).any {
+                    it.startsWith(wanted) || wanted.startsWith(it)
+                } -> 40
+                else -> 0
+            }
+            Triple(contact, score, normalizedName)
+        }.filter { it.second > 0 }
+            .sortedWith(compareByDescending<Triple<Pair<String, String>, Int, String>> { it.second }
+                .thenBy { it.first.first.length })
+
+        if (ranked.isEmpty()) {
+            status.text = "نام «$query» با اطمینان در مخاطبین پیدا نشد. نام را تایپ کنید یا دوباره واضح بگویید."
             return
         }
-        if (matches.size == 1) {
-            showContact(matches.first().first, matches.first().second)
+        val bestScore = ranked.first().second
+        val best = ranked.filter { it.second == bestScore }
+            .map { it.first }
+            .distinctBy { it.second }
+            .take(8)
+
+        if (best.size == 1 && bestScore >= 80) {
+            showContact(best.first().first, best.first().second)
         } else {
-            val labels = matches.map { "${it.first} — ${it.second}" }.toTypedArray()
+            val labels = best.map { "${it.first} — ${it.second}" }.toTypedArray()
             android.app.AlertDialog.Builder(this)
-                .setTitle("کدام مخاطب؟")
-                .setItems(labels) { _, which -> showContact(matches[which].first, matches[which].second) }
+                .setTitle("لطفاً مخاطب را تأیید کن")
+                .setItems(labels) { _, which -> showContact(best[which].first, best[which].second) }
                 .setNegativeButton("لغو", null)
                 .show()
         }
