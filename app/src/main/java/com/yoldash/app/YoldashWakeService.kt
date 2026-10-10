@@ -105,7 +105,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
                         override fun onResults(results: Bundle?) {
                             val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                             handlePhrase(phrase)
-                            scheduleListening(400)
+                            scheduleListening(150)
                         }
                         override fun onPartialResults(partialResults: Bundle?) {}
                         override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -140,10 +140,10 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             // do not leave the service waiting for an extra command.
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
-            speak("Buyur, səni dinləyirəm.")
+            speak("Buyur.")
         } else if (awaitingCommand) {
             sendRecognizedPhrase(phrase)
-            speak("Səni eşitdim. Kontaktlara baxmaq və zəng etmək üçün telefonu aç və Yoldaşı aç.")
+            speak("Oldu.")
             awaitingCommand = false
         }
     }
