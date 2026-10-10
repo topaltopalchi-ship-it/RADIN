@@ -50,8 +50,13 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
+            val engine = tts ?: return
+            val azeri = engine.setLanguage(Locale("az", "AZ"))
+            if (azeri == TextToSpeech.LANG_MISSING_DATA ||
+                azeri == TextToSpeech.LANG_NOT_SUPPORTED) {
+                engine.setLanguage(Locale("tr", "TR"))
+            }
             ttsReady = true
-            tts?.language = Locale("az", "AZ")
         }
     }
 
@@ -110,6 +115,8 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "az-AZ")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "az-AZ")
+                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             }
