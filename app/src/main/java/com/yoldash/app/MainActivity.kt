@@ -62,7 +62,7 @@ class MainActivity : Activity() {
         nameInput = EditText(this).apply {
             hint = "نام مخاطب را بنویسید"
             textSize = 18f
-            singleLine = true
+            setSingleLine(true)
         }
         searchButton = Button(this).apply {
             text = "جست‌وجوی مخاطب"
