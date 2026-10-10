@@ -2,6 +2,9 @@ package com.yoldash.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.app.role.RoleManager
@@ -26,6 +29,12 @@ class MainActivity : Activity() {
     private lateinit var voiceButton: Button
     private lateinit var dialerRoleButton: Button
     private var pendingCallNumber: String? = null
+    private var wakeReceiverRegistered = false
+    private val wakeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            handleServicePhrase(intent?.getStringExtra(YoldashWakeService.EXTRA_PHRASE).orEmpty())
+        }
+    }
     private var wakeMode = false
     private var awaitingContactName = false
     private val contactsPermissionRequest = 42
@@ -106,6 +115,82 @@ class MainActivity : Activity() {
                     .show()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!wakeReceiverRegistered) {
+            val filter = IntentFilter(YoldashWakeService.ACTION_RECOGNIZED)
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(wakeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(wakeReceiver, filter)
+            }
+            wakeReceiverRegistered = true
+        }
+    }
+
+    override fun onPause() {
+        if (wakeReceiverRegistered) {
+            try { unregisterReceiver(wakeReceiver) } catch (_: Exception) {}
+            wakeReceiverRegistered = false
+        }
+        super.onPause()
+    }
+
+    private fun handleServicePhrase(phrase: String) {
+        if (phrase.isBlank()) return
+        val normalized = phrase.lowercase(Locale.ROOT)
+        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
+        val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
+        if (wakeWord != null) {
+            val remainder = phrase.substringAfter(wakeWord, "").trim()
+            if (remainder.isNotBlank()) {
+                val query = extractContactQuery(remainder)
+                nameInput.setText(query)
+                searchContact(query)
+            } else {
+                awaitingContactName = true
+                status.text = "Bəli, eşidirəm. İndi kontaktın adını və əmri deyin."
+            }
+        } else if (awaitingContactName) {
+            awaitingContactName = false
+            val query = extractContactQuery(phrase)
+            nameInput.setText(query)
+            searchContact(query)
+        }
+    }
+
+    private fun extractContactQuery(command: String): String {
+        var query = command.trim().trimEnd('.', ',', '!', '?')
+        val prefixes = listOf("mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ",
+            "zəhmət olmasa ", "zehmet olmasa ", "please ")
+        prefixes.forEach { prefix ->
+            if (query.lowercase(Locale.ROOT).startsWith(prefix)) {
+                query = query.substring(prefix.length).trim()
+            }
+        }
+        val suffixes = listOf(" zəng elə", " zəng ele", " zəng at", " zəng et", " zəng vur",
+            " zəng edin", " telefon et", " zənglə", " zəngle", " ara", " arayın", " arayin",
+            " tut mənə", " tut mene", " zəng etsin", " call", " telefon aç", " telefon ac")
+        var changed = true
+        while (changed) {
+            changed = false
+            suffixes.forEach { suffix ->
+                if (query.lowercase(Locale.ROOT).endsWith(suffix)) {
+                    query = query.dropLast(suffix.length).trim()
+                    changed = true
+                }
+            }
+        }
+        for (ending in listOf("ya", "yə", "a", "ə")) {
+            if (query.lowercase(Locale.ROOT).endsWith(ending) && query.length > ending.length + 1) {
+                query = query.dropLast(ending.length)
+                break
+            }
+        }
+        return query.ifBlank { command.trim() }
     }
 
     private fun requestDefaultDialerRole() {
