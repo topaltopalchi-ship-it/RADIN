@@ -126,7 +126,12 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         val normalized = phrase.lowercase(Locale.ROOT)
         val wake = listOf("yoldaş", "yoldash", "yoldas", "یولداش").any { normalized.contains(it) }
         if (wake) {
-            awaitingCommand = true
+            val wakeWord = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
+                .firstOrNull { normalized.contains(it) }
+            val remainder = wakeWord?.let { normalized.substringAfter(it).trim() }.orEmpty()
+            // If the user says the wake word and the command in one sentence,
+            // do not leave the service waiting for an extra command.
+            awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
             speak("Buyur, səni dinləyirəm.")
         } else if (awaitingCommand) {
