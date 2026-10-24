@@ -106,24 +106,25 @@ class YoldashWakeService : Service() {
 
     private fun runOfflineRecognition() {
         try {
-            val whisper = OfflineWhisperModelConfig.builder()
-                .setEncoder(modelFile("tiny-encoder.int8.onnx"))
-                .setDecoder(modelFile("tiny-decoder.int8.onnx"))
-                .setLanguage("az")
-                .setTask("transcribe")
-                .setTailPaddings(0)
-                .build()
-            val model = OfflineModelConfig.builder()
-                .setWhisper(whisper)
-                .setTokens(modelFile("tiny-tokens.txt"))
-                .setNumThreads(4)
-                .setProvider("cpu")
-                .build()
-            val config = OfflineRecognizerConfig.builder()
-                .setOfflineModelConfig(model)
-                .setDecodingMethod("greedy_search")
-                .build()
-            recognizer = OfflineRecognizer(config)
+            val whisper = OfflineWhisperModelConfig(
+                encoder = modelFile("tiny-encoder.int8.onnx"),
+                decoder = modelFile("tiny-decoder.int8.onnx"),
+                language = "az",
+                task = "transcribe",
+                tailPaddings = 0
+            )
+            val model = OfflineModelConfig(
+                whisper = whisper,
+                tokens = modelFile("tiny-tokens.txt"),
+                numThreads = 4,
+                provider = "cpu",
+                modelType = "whisper"
+            )
+            val config = OfflineRecognizerConfig(
+                modelConfig = model,
+                decodingMethod = "greedy_search"
+            )
+            recognizer = OfflineRecognizer(config = config)
 
             val sampleRate = 16000
             val minBuffer = AudioRecord.getMinBufferSize(
@@ -179,7 +180,7 @@ class YoldashWakeService : Service() {
             stream = engine.createStream()
             stream.acceptWaveform(samples, sampleRate)
             engine.decode(stream)
-            val phrase = engine.getResult(stream).getText().trim()
+            val phrase = engine.getResult(stream).text.trim()
             if (phrase.isNotBlank()) {
                 Log.d(TAG, "Sherpa heard: $phrase")
                 handlePhrase(phrase)
