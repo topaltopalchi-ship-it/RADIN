@@ -3,7 +3,7 @@ name: Build Yoldash APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "sherpa-offline-integration" ]
 
 jobs:
   build:
@@ -11,6 +11,10 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+      - name: Download Sherpa-ONNX Android library
+        run: |
+          curl --fail --location --retry 3 --output app/sherpa-onnx-1.13.8.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  app/sherpa-onnx-1.13.8.aar" | sha256sum --check
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
