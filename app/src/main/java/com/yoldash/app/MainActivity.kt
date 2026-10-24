@@ -175,7 +175,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val normalized = normalizeSpeech(phrase)
         if (awaitingVoiceConfirmation) {
             when {
-                listOf("بله", "آره", "اره", "تایید", "تأیید", "بگیر", "تماس بگیر").any { normalized.contains(it) } -> {
+                listOf("بله بگیر", "آره بگیر", "اره بگیر", "تایید بگیر", "تأیید بگیر", "تماس بگیر", "yes call", "yes please", "yes", "confirm call", "make the call", "go ahead").any { normalized == it || normalized.contains(it) } -> {
                     val number = pendingCallNumber
                     val name = pendingCallName
                     awaitingVoiceConfirmation = false
@@ -189,14 +189,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         awaitingContactName = true
                     }
                 }
-                listOf("نه", "خیر", "لغو", "بیخیال", "بی خیال").any { normalized.contains(it) } -> {
+                listOf("نه", "خیر", "لغو", "بیخیال", "بی خیال", "no", "cancel", "do not call", "dont call").any { normalized.contains(it) } -> {
                     awaitingVoiceConfirmation = false
                     pendingCallNumber = null
                     pendingCallName = null
                     speakPersian("تماس لغو شد. اگر تماس دیگری می‌خواهی نام مخاطب را بگو.")
                     awaitingContactName = true
                 }
-                else -> speakPersian("متوجه نشدم. برای تماس بگو بله بگیر، یا برای لغو بگو نه.")
+                else -> speakPersian("متوجه نشدم. برای تأیید دقیقاً بگو بله بگیر یا yes call؛ برای لغو بگو نه یا cancel.")
             }
             return
         }
@@ -211,7 +211,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             } else speakPersian("متوجه نشدم. نام مخاطب یا شماره گزینه را بگو.")
             return
         }
-        val wakeWord = listOf("یولداش", "yoldash", "yoldaş", "yoldas").firstOrNull { normalized.contains(it) }
+        val wakeWord = listOf("یولداش", "yoldash", "yoldaş", "yoldas", "yoldash").firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val remainder = normalized.substringAfter(wakeWord).trim()
             if (remainder.isNotBlank()) {
@@ -220,7 +220,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 searchContact(remainder, true)
             } else {
                 awaitingContactName = true
-                speakPersian("بله، بفرما! نام مخاطب را بگو.")
+                speakPersian("بله، بفرما! نام مخاطب را فارسی یا انگلیسی بگو.")
             }
             return
         }
@@ -234,7 +234,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun extractContactQuery(command: String): String {
         var query = command.trim().trimEnd('.', ',', '!', '?')
-        val prefixes = listOf("به ", "با ", "لطفاً ", "لطفا ", "شماره ", "تماس با ", "زنگ به ", "مرا به ", "mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ", "zəhmət olmasa ", "zehmet olmasa ", "please ")
+        val prefixes = listOf("به ", "با ", "لطفاً ", "لطفا ", "شماره ", "تماس با ", "زنگ به ", "مرا به ", "mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ", "zəhmət olmasa ", "zehmet olmasa ", "please ", "call ", "call up ", "phone ", "ring ", "dial ", "contact ", "find ", "search ", "look up ", "get me ", "connect me to ", "can you call ", "could you call ", "please call ", "call the ", "call my ")
         prefixes.forEach { prefix ->
             if (query.lowercase(Locale.ROOT).startsWith(prefix)) {
                 query = query.substring(prefix.length).trim()
@@ -248,7 +248,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             " zəng at", " zəng et", " zəng vur", " zəng edin", " zəng eləyin",
             " zəng eleyn", " telefon et", " zənglə", " zəngle", " arayın",
             " arayin", " ara", " tut mənə", " tut mene", " zəng etsin",
-            " call", " telefon aç", " telefon ac", " yığ", " yig"
+            " call", " phone", " please", " now", " telefon aç", " telefon ac", " yığ", " yig"
         )
         var changed = true
         while (changed) {
@@ -364,9 +364,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
 
         fun normalize(value: String): String = value.lowercase(Locale.ROOT)
+            .replace('ي', 'ی').replace('ك', 'ک').replace('ۀ', 'ه').replace('ة', 'ه')
+            .replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+            .replace('ئ', 'ی').replace('ؤ', 'و')
             .replace('ə', 'e').replace('ı', 'i').replace('ö', 'o')
-            .replace('ü', 'u').replace('ş', 's').replace('ç', 'c')
-            .replace('ğ', 'g')
+            .replace('ü', 'u').replace('ş', 's').replace('ç', 'c').replace('ğ', 'g')
+            .replace('á', 'a').replace('à', 'a').replace('é', 'e').replace('è', 'e')
+            .replace('ó', 'o').replace('ò', 'o').replace('ú', 'u')
             .filter { it.isLetterOrDigit() }
 
         val wanted = normalize(query)
