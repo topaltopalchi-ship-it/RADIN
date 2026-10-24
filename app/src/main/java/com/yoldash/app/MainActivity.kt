@@ -83,15 +83,15 @@ class MainActivity : Activity() {
             setOnClickListener { if (wakeMode) stopWakeListening() else startWakeListening() }
         }
         dialerRoleButton = Button(this).apply {
-            text = "تنظیم یولداش به‌عنوان تلفن پیش‌فرض"
+            text = "تنظیم رادین به‌عنوان تلفن پیش‌فرض"
             setOnClickListener { requestDefaultDialerRole() }
         }
         permissionsButton = Button(this).apply {
-            text = "⚙ بازکردن تنظیمات اجازه‌های یولداش"
+            text = "⚙ بازکردن تنظیمات اجازه‌های رادین"
             setOnClickListener { showPermissionHelp() }
         }
         status = TextView(this).apply {
-            text = "Bидارباشı aktiv edin və «Yoldaş» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
+            text = "Bидارباشı aktiv edin və «Radin» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
             textSize = 16f
             setPadding(0, 24, 0, 16)
         }
@@ -149,7 +149,7 @@ class MainActivity : Activity() {
     private fun handleServicePhrase(phrase: String) {
         if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("رادین", "radin", "rādin")
+        val wakeWords = listOf("رادین", "رادين", "رادیم", "رامین", "radin", "rādin", "ramin")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val wakeIndex = phrase.indexOf(wakeWord, ignoreCase = true)
@@ -214,7 +214,7 @@ class MainActivity : Activity() {
                 !roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
                 startActivityForResult(roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER), 44)
             } else if (roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
-                status.text = "یولداش از قبل برنامه تلفن پیش‌فرض است."
+                status.text = "رادین از قبل برنامه تلفن پیش‌فرض است."
             } else {
                 status.text = "نقش تلفن پیش‌فرض در این گوشی در دسترس نیست."
             }
@@ -278,7 +278,7 @@ class MainActivity : Activity() {
         wakeMode = false
         awaitingContactName = false
         try { stopService(Intent(this, YoldashWakeService::class.java)) } catch (_: Exception) {}
-        if (::voiceButton.isInitialized) voiceButton.text = "🎙 فعال‌کردن بیدارباش «یولداش»"
+        if (::voiceButton.isInitialized) voiceButton.text = "🎙 فعال‌کردن بیدارباش «رادین»"
         if (::status.isInitialized) status.text = "بیدارباش خاموش است. برای شروع دوباره، دکمه میکروفون را بزنید."
     }
 
