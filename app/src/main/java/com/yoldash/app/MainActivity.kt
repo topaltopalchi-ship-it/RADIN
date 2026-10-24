@@ -166,7 +166,7 @@ class MainActivity : Activity() {
             awaitingContactName = false
             val query = extractContactQuery(phrase)
             nameInput.setText(query)
-            searchContact(query, callImmediately = true)
+            searchContact(query, callImmediately = false)
         }
     }
 
@@ -226,7 +226,7 @@ class MainActivity : Activity() {
     private fun showPermissionHelp() {
         android.app.AlertDialog.Builder(this)
             .setTitle("آماده‌سازی یولداش")
-            .setMessage("مدل تشخیص گفتار Sherpa باید داخل APK نصب‌شده بسته‌بندی شده باشد؛ در این حالت دانلود جداگانه لازم نیست و تشخیص آفلاین پس از نصب مدل اجرا می‌شود.\\n\\nبرای فعال‌کردن قابلیت‌ها، اجازهٔ میکروفون و مخاطبین را بدهید. اگر سامسونگ دسترسی را مسدود کرد، در صفحهٔ اطلاعات برنامه منوی ⋮ را باز کنید و «اجازهٔ تنظیمات محدودشده» را فعال کنید؛ سپس به بخش مجوزها برگردید. یولداش بدون اجازهٔ شما نمی‌تواند این دسترسی‌ها را خودش فعال کند.")
+            .setMessage("مدل تشخیص گفتار Vosk فارسی داخل APK بسته‌بندی شده است و تشخیص آفلاین انجام می‌شود.\\n\\nبرای فعال‌کردن قابلیت‌ها، اجازهٔ میکروفون و مخاطبین را بدهید. اگر سامسونگ دسترسی را مسدود کرد، در صفحهٔ اطلاعات برنامه منوی ⋮ را باز کنید و «اجازهٔ تنظیمات محدودشده» را فعال کنید؛ سپس به بخش مجوزها برگردید. یولداش بدون اجازهٔ شما نمی‌تواند این دسترسی‌ها را خودش فعال کند.")
             .setPositiveButton("بازکردن تنظیمات برنامه") { _, _ -> openAppSettings() }
             .setNeutralButton("درخواست اجازه‌ها") { _, _ -> requestNeededPermissions(); requestAudioPermissionIfNeeded() }
             .setNegativeButton("بستن", null)
