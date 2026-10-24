@@ -448,7 +448,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 getSystemService(TelecomManager::class.java)
                     .placeCall(Uri.parse("tel:" + Uri.encode(number)), Bundle())
             } else {
-                startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
+                speakPersian("برای تماس بدون لمس دکمه، ابتدا دکمه تنظیم یولداش به عنوان تلفن پیش‌فرض را بزن و اجازه‌های لازم را تأیید کن. فعلاً تماس شروع نشد.")
             }
         } catch (_: Exception) {
             Toast.makeText(this, "شروع تماس ممکن نشد؛ شماره را در شماره‌گیر بررسی کنید.", Toast.LENGTH_LONG).show()
