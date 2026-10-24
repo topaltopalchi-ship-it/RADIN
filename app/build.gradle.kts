@@ -53,7 +53,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
 
-    // Sherpa-ONNX is downloaded by the GitHub Actions workflow before building.
+dependencies {
+    // Sherpa-ONNX is downloaded by GitHub Actions before building.
     implementation(files("sherpa-onnx-1.13.8.aar"))
 }
