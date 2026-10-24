@@ -14,6 +14,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -29,6 +30,7 @@ class MainActivity : Activity() {
     private lateinit var searchButton: Button
     private lateinit var voiceButton: Button
     private lateinit var dialerRoleButton: Button
+    private lateinit var permissionsButton: Button
     private var pendingCallNumber: String? = null
     private var wakeReceiverRegistered = false
     private val wakeReceiver = object : BroadcastReceiver() {
@@ -84,12 +86,16 @@ class MainActivity : Activity() {
             text = "تنظیم یولداش به‌عنوان تلفن پیش‌فرض"
             setOnClickListener { requestDefaultDialerRole() }
         }
+        permissionsButton = Button(this).apply {
+            text = "⚙ بازکردن تنظیمات اجازه‌های یولداش"
+            setOnClickListener { showPermissionHelp() }
+        }
         status = TextView(this).apply {
             text = "Bидارباشı aktiv edin və «Yoldaş» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
             textSize = 16f
             setPadding(0, 24, 0, 16)
         }
-        listOf(title, subtitle, nameInput, searchButton, voiceButton, dialerRoleButton, status).forEach {
+        listOf(title, subtitle, nameInput, searchButton, voiceButton, permissionsButton, dialerRoleButton, status).forEach {
             root.addView(it, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -214,6 +220,30 @@ class MainActivity : Activity() {
             }
         } else {
             status.text = "برای تنظیم تلفن پیش‌فرض، نسخه اندروید این گوشی نیاز به بررسی دارد."
+        }
+    }
+
+    private fun showPermissionHelp() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("آماده‌سازی یولداش")
+            .setMessage("مدل تشخیص گفتار Sherpa باید داخل APK نصب‌شده بسته‌بندی شده باشد؛ در این حالت دانلود جداگانه لازم نیست و تشخیص آفلاین پس از نصب مدل اجرا می‌شود.\\n\\nبرای فعال‌کردن قابلیت‌ها، اجازهٔ میکروفون و مخاطبین را بدهید. اگر سامسونگ دسترسی را مسدود کرد، در صفحهٔ اطلاعات برنامه منوی ⋮ را باز کنید و «اجازهٔ تنظیمات محدودشده» را فعال کنید؛ سپس به بخش مجوزها برگردید. یولداش بدون اجازهٔ شما نمی‌تواند این دسترسی‌ها را خودش فعال کند.")
+            .setPositiveButton("بازکردن تنظیمات برنامه") { _, _ -> openAppSettings() }
+            .setNeutralButton("درخواست اجازه‌ها") { _, _ -> requestNeededPermissions(); requestAudioPermissionIfNeeded() }
+            .setNegativeButton("بستن", null)
+            .show()
+    }
+
+    private fun openAppSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        } catch (_: Exception) {
+            status.text = "تنظیمات برنامه باز نشد؛ از تنظیمات گوشی ← برنامه‌ها ← Yoldash وارد شوید."
+        }
+    }
+
+    private fun requestAudioPermissionIfNeeded() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), audioPermissionRequest)
         }
     }
 
