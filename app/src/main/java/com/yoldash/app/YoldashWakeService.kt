@@ -153,7 +153,6 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             conversationActive = true
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
-            if (remainder.isBlank()) speak("بله، بفرما!")
             return
         }
         // Keep forwarding speech during the active voice dialogue so the app can
