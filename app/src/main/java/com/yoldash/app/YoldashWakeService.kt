@@ -139,7 +139,7 @@ class YoldashWakeService : Service() {
             if (recorder.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("Microphone initialization failed")
             recorder.startRecording()
             speak("یولداش فعال شد.")
-            val chunkSamples = sampleRate * 3
+            val chunkSamples = sampleRate * 2
             val input = ShortArray(2048)
             val chunk = ShortArray(chunkSamples)
             var filled = 0
@@ -174,6 +174,14 @@ class YoldashWakeService : Service() {
 
     private fun decodeChunk(pcm: ShortArray, sampleRate: Int) {
         val engine = recognizer ?: return
+        // Skip near-silent chunks; Whisper decoding silence is expensive and adds variable response delay.
+        var energy = 0.0
+        for (sample in pcm) {
+            val value = sample / 32768.0
+            energy += value * value
+        }
+        val rms = kotlin.math.sqrt(energy / pcm.size)
+        if (rms < 0.008) return
         val samples = FloatArray(pcm.size) { pcm[it] / 32768.0f }
         var stream: OfflineStream? = null
         try {
