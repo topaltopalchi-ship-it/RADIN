@@ -15,11 +15,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
-import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineRecognizer
-import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
-import com.k2fsa.sherpa.onnx.OfflineStream
-import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -33,7 +31,8 @@ class YoldashWakeService : Service() {
     @Volatile private var serviceStopping = false
     @Volatile private var ttsReady = false
     private var tts: android.speech.tts.TextToSpeech? = null
-    private var recognizer: OfflineRecognizer? = null
+    private var voskModel: Model? = null
+    private var recognizer: Recognizer? = null
     private var audioRecord: AudioRecord? = null
     private var listenThread: Thread? = null
 
@@ -44,10 +43,10 @@ class YoldashWakeService : Service() {
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
                 val engine = tts
                 if (engine != null) {
-                    val result = engine.setLanguage(Locale("az", "AZ"))
+                    val result = engine.setLanguage(Locale("fa", "IR"))
                     if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
                         result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
-                        Log.w(TAG, "Azerbaijani TTS is unavailable; Turkish fallback is disabled.")
+                        Log.w(TAG, "Persian TTS unavailable.")
                     }
                     ttsReady = true
                 }
@@ -69,7 +68,7 @@ class YoldashWakeService : Service() {
         serviceStopping = false
         startForeground(NOTIFICATION_ID, buildNotification())
         if (active.compareAndSet(false, true)) {
-            listenThread = thread(name = "YoldashSherpaMic") { runOfflineRecognition() }
+            listenThread = thread(name = "YoldashVoskMic") { runRecognition() }
         }
         return START_STICKY
     }
@@ -77,7 +76,7 @@ class YoldashWakeService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "Yoldash voice assistant", NotificationManager.IMPORTANCE_LOW)
-            channel.description = "Offline Sherpa-ONNX voice wake-up."
+            channel.description = "Offline Vosk voice recognition."
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
@@ -91,44 +90,34 @@ class YoldashWakeService : Service() {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
             else Notification.Builder(this)
         return builder.setContentTitle("یولداش فعال است")
-            .setContentText("تشخیص گفتار آفلاین با Sherpa؛ بگویید «یولداش».")
+            .setContentText("تشخیص گفتار فارسی آفلاین با Vosk؛ بگویید «یولداش».")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openApp).setOngoing(true).build()
     }
 
-    private fun modelFile(assetName: String): String {
-        val directory = File(filesDir, "sherpa-whisper-tiny")
-        if (!directory.exists()) directory.mkdirs()
-        val destination = File(directory, assetName)
-        if (!destination.exists() || destination.length() == 0L) {
-            assets.open("sherpa-whisper-tiny/$assetName").use { input ->
+    private fun copyAssetTree(assetPath: String, destination: File) {
+        val children = assets.list(assetPath).orEmpty()
+        if (children.isNotEmpty()) {
+            if (!destination.exists()) destination.mkdirs()
+            for (child in children) copyAssetTree("$assetPath/$child", File(destination, child))
+        } else {
+            if (destination.exists() && destination.length() > 0L) return
+            destination.parentFile?.mkdirs()
+            assets.open(assetPath).use { input ->
                 FileOutputStream(destination).use { output -> input.copyTo(output) }
             }
         }
-        return destination.absolutePath
     }
 
-    private fun runOfflineRecognition() {
+    private fun runRecognition() {
+        var localRecorder: AudioRecord? = null
         try {
-            val whisper = OfflineWhisperModelConfig(
-                encoder = modelFile("tiny-encoder.int8.onnx"),
-                decoder = modelFile("tiny-decoder.int8.onnx"),
-                language = "fa",
-                task = "transcribe",
-                tailPaddings = 0
-            )
-            val model = OfflineModelConfig(
-                whisper = whisper,
-                tokens = modelFile("tiny-tokens.txt"),
-                numThreads = 4,
-                provider = "cpu",
-                modelType = "whisper"
-            )
-            val config = OfflineRecognizerConfig(
-                modelConfig = model,
-                decodingMethod = "greedy_search"
-            )
-            recognizer = OfflineRecognizer(config = config)
+            val modelDir = File(filesDir, "vosk-model-small-fa-0.42")
+            if (!File(modelDir, "am").exists()) {
+                copyAssetTree("vosk-model-small-fa-0.42", modelDir)
+            }
+            voskModel = Model(modelDir.absolutePath)
+            recognizer = Recognizer(voskModel, 16000.0f)
 
             val sampleRate = 16000
             val minBuffer = AudioRecord.getMinBufferSize(
@@ -139,48 +128,52 @@ class YoldashWakeService : Service() {
                 MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, sampleRate * 2)
             )
+            localRecorder = recorder
             audioRecord = recorder
             if (recorder.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("Microphone initialization failed")
             recorder.startRecording()
             speak("یولداش فعال شد.")
-            val chunkSamples = sampleRate * 2
             val input = ShortArray(2048)
-            val chunk = ShortArray(chunkSamples)
-            var filled = 0
+            val bytes = ByteArray(input.size * 2)
             while (active.get() && !Thread.currentThread().isInterrupted) {
                 val count = recorder.read(input, 0, input.size)
                 if (count <= 0) {
                     Log.w(TAG, "AudioRecord read returned $count")
                     continue
                 }
-                var offset = 0
-                while (offset < count) {
-                    val copyCount = minOf(count - offset, chunkSamples - filled)
-                    System.arraycopy(input, offset, chunk, filled, copyCount)
-                    filled += copyCount
-                    offset += copyCount
-                    if (filled == chunkSamples) {
-                        decodeChunk(chunk, sampleRate)
-                        filled = 0
+                for (i in 0 until count) {
+                    val sample = input[i].toInt()
+                    bytes[i * 2] = (sample and 0xff).toByte()
+                    bytes[i * 2 + 1] = ((sample shr 8) and 0xff).toByte()
+                }
+                val engine = recognizer ?: continue
+                if (engine.acceptWaveForm(bytes, count * 2)) {
+                    val phrase = JSONObject(engine.result).optString("text").trim()
+                    if (phrase.isNotBlank()) {
+                        Log.d(TAG, "Vosk heard: $phrase")
+                        handlePhrase(phrase)
                     }
                 }
             }
-            try { recorder.stop() } catch (_: Exception) {}
-            recorder.release()
-            audioRecord = null
         } catch (e: Exception) {
-            Log.e(TAG, "Sherpa offline recognition failed", e)
-            handler.post { speak("تشخیص گفتار آفلاین راه‌اندازی نشد.") }
+            Log.e(TAG, "Vosk offline recognition failed", e)
+            handler.post { speak("تشخیص گفتار راه‌اندازی نشد؛ مجوز میکروفون را بررسی کنید.") }
         } finally {
+            try { localRecorder?.stop() } catch (_: Exception) {}
+            try { localRecorder?.release() } catch (_: Exception) {}
+            audioRecord = null
+            try { recognizer?.close() } catch (_: Exception) {}
+            recognizer = null
+            try { voskModel?.close() } catch (_: Exception) {}
+            voskModel = null
             active.set(false)
-            // Restart if recognition exits unexpectedly instead of leaving the service deaf.
             if (!serviceStopping) {
                 handler.postDelayed({
                     if (!serviceStopping && !active.get() &&
                         checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        Log.w(TAG, "Restarting offline recognition after loop exit")
+                        Log.w(TAG, "Restarting Vosk recognition after loop exit")
                         if (active.compareAndSet(false, true)) {
-                            listenThread = thread(name = "YoldashSherpaMic") { runOfflineRecognition() }
+                            listenThread = thread(name = "YoldashVoskMic") { runRecognition() }
                         }
                     }
                 }, 1500L)
@@ -188,37 +181,9 @@ class YoldashWakeService : Service() {
         }
     }
 
-    private fun decodeChunk(pcm: ShortArray, sampleRate: Int) {
-        val engine = recognizer ?: return
-        // Skip near-silent chunks; Whisper decoding silence is expensive and adds variable response delay.
-        var energy = 0.0
-        for (sample in pcm) {
-            val value = sample / 32768.0
-            energy += value * value
-        }
-        val rms = kotlin.math.sqrt(energy / pcm.size)
-        if (rms < 0.008) return
-        val samples = FloatArray(pcm.size) { pcm[it] / 32768.0f }
-        var stream: OfflineStream? = null
-        try {
-            stream = engine.createStream()
-            stream.acceptWaveform(samples, sampleRate)
-            engine.decode(stream)
-            val phrase = engine.getResult(stream).text.trim()
-            if (phrase.isNotBlank()) {
-                Log.d(TAG, "Sherpa heard: $phrase")
-                handlePhrase(phrase)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Sherpa decode error", e)
-        } finally {
-            stream?.release()
-        }
-    }
-
     private fun handlePhrase(phrase: String) {
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("yoldaş", "yoldash", "yoldas", "یولداش", "یولداش")
+        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val remainder = normalized.substringAfter(wakeWord).trim()
@@ -242,7 +207,7 @@ class YoldashWakeService : Service() {
 
     private fun speak(message: String) {
         handler.post {
-            if (ttsReady) tts?.speak(message, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yoldash-sherpa")
+            if (ttsReady) tts?.speak(message, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yoldash-vosk")
             else Log.w(TAG, "TTS not ready; skipped speech: $message")
         }
     }
@@ -254,8 +219,10 @@ class YoldashWakeService : Service() {
         try { audioRecord?.release() } catch (_: Exception) {}
         audioRecord = null
         try { listenThread?.interrupt() } catch (_: Exception) {}
-        recognizer?.release()
+        try { recognizer?.close() } catch (_: Exception) {}
         recognizer = null
+        try { voskModel?.close() } catch (_: Exception) {}
+        voskModel = null
         tts?.stop()
         tts?.shutdown()
         tts = null
@@ -271,6 +238,6 @@ class YoldashWakeService : Service() {
         const val EXTRA_PHRASE = "com.yoldash.app.extra.PHRASE"
         private const val CHANNEL_ID = "yoldash_wake_service"
         private const val NOTIFICATION_ID = 601
-        private const val TAG = "YoldashSherpa"
+        private const val TAG = "YoldashVosk"
     }
 }
