@@ -56,6 +56,5 @@ android {
 }
 
 dependencies {
-    // Sherpa-ONNX is downloaded by GitHub Actions before building.
-    implementation(files("sherpa-onnx-1.13.8.aar"))
+    implementation("com.alphacephei:vosk-android:0.3.47")
 }
