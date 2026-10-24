@@ -157,7 +157,7 @@ class MainActivity : Activity() {
             if (remainder.isNotBlank()) {
                 val query = extractContactQuery(remainder)
                 nameInput.setText(query)
-                searchContact(query, callImmediately = true)
+                searchContact(query, callImmediately = false)
             } else {
                 awaitingContactName = true
                 status.text = "Bəli, eşidirəm. İndi kontaktın adını və əmri deyin."
