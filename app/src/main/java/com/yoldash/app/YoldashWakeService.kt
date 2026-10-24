@@ -41,13 +41,15 @@ class YoldashWakeService : Service() {
         createNotificationChannel()
         tts = android.speech.tts.TextToSpeech(this) { status ->
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                val engine = tts ?: return@TextToSpeech
-                val result = engine.setLanguage(Locale("az", "AZ"))
-                if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
-                    result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
-                    engine.setLanguage(Locale("tr", "TR"))
+                val engine = tts
+                if (engine != null) {
+                    val result = engine.setLanguage(Locale("az", "AZ"))
+                    if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
+                        result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                        engine.setLanguage(Locale("tr", "TR"))
+                    }
+                    ttsReady = true
                 }
-                ttsReady = true
             }
         }
     }
