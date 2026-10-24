@@ -371,7 +371,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .replace('ü', 'u').replace('ş', 's').replace('ç', 'c').replace('ğ', 'g')
             .replace('á', 'a').replace('à', 'a').replace('é', 'e').replace('è', 'e')
             .replace('ó', 'o').replace('ò', 'o').replace('ú', 'u')
-            .filter { it.isLetterOrDigit() }
+            .filter { it.isLetterOrDigit() || it.isWhitespace() }
+            .replace(Regex("\\s+"), " ").trim()
 
         val wanted = normalize(query)
         val ranked = allContacts.map { contact ->
