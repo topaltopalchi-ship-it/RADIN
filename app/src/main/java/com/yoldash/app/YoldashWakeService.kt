@@ -51,12 +51,9 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             val engine = tts ?: return
-            val azeri = engine.setLanguage(Locale("az", "AZ"))
-            if (azeri == TextToSpeech.LANG_MISSING_DATA ||
-                azeri == TextToSpeech.LANG_NOT_SUPPORTED) {
-                engine.setLanguage(Locale("tr", "TR"))
-            }
-            ttsReady = true
+            val persian = engine.setLanguage(Locale("fa", "IR"))
+            ttsReady = persian != TextToSpeech.LANG_MISSING_DATA &&
+                persian != TextToSpeech.LANG_NOT_SUPPORTED
         }
     }
 
@@ -114,8 +111,8 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             }
             val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "az-AZ")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "az-AZ")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "fa-IR")
                 putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
@@ -131,7 +128,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private fun handlePhrase(phrase: String) {
         if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wake = listOf("yoldaş", "yoldash", "yoldas", "یولداش").any { normalized.contains(it) }
+        val wake = listOf("یولداش", "یولداش", "yoldash", "yoldaş", "yoldas").any { normalized.contains(it) }
         if (wake) {
             val wakeWord = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
                 .firstOrNull { normalized.contains(it) }
@@ -140,10 +137,10 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             // do not leave the service waiting for an extra command.
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
-            speak("Buyur, səni dinləyirəm.")
+            speak("بله، گوش می‌کنم.")
         } else if (awaitingCommand) {
             sendRecognizedPhrase(phrase)
-            speak("Səni eşitdim. Kontaktlara baxmaq və zəng etmək üçün telefonu aç və Yoldaşı aç.")
+            speak("صدایتان را شنیدم. برای پیدا کردن مخاطب، نام او را بگویید.")
             awaitingCommand = false
         }
     }
