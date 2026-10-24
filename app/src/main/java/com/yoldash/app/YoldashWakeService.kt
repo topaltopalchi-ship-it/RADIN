@@ -25,6 +25,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private var ttsReady = false
     private var listening = false
     private var awaitingCommand = false
+    private var conversationActive = false
     private var consecutiveRecognitionErrors = 0
     @Volatile private var active = true
 
@@ -145,19 +146,20 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private fun handlePhrase(phrase: String) {
         if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wake = listOf("یولداش", "یولداش", "yoldash", "yoldaş", "yoldas").any { normalized.contains(it) }
-        if (wake) {
-            val wakeWord = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
-                .firstOrNull { normalized.contains(it) }
-            val remainder = wakeWord?.let { normalized.substringAfter(it).trim() }.orEmpty()
-            // If the user says the wake word and the command in one sentence,
-            // do not leave the service waiting for an extra command.
+        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
+        val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
+        if (wakeWord != null) {
+            val remainder = normalized.substringAfter(wakeWord).trim()
+            conversationActive = true
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
-            speak("بله، گوش می‌کنم.")
-        } else if (awaitingCommand) {
+            if (remainder.isBlank()) speak("بله، بفرما!")
+            return
+        }
+        // Keep forwarding speech during the active voice dialogue so the app can
+        // hear contact names, confirmation ("بله، بگیر") and cancellation ("نه").
+        if (conversationActive || awaitingCommand) {
             sendRecognizedPhrase(phrase)
-            speak("صدایتان را شنیدم. برای پیدا کردن مخاطب، نام او را بگویید.")
             awaitingCommand = false
         }
     }
