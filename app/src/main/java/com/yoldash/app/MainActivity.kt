@@ -58,7 +58,7 @@ class MainActivity : Activity() {
             setBackgroundColor(0xFFF5F7F6.toInt())
         }
         val title = TextView(this).apply {
-            text = "Yoldash"
+            text = "رادین"
             textSize = 34f
             setTextColor(0xFF173D32.toInt())
             gravity = Gravity.CENTER
@@ -79,7 +79,7 @@ class MainActivity : Activity() {
             setOnClickListener { searchContact(nameInput.text.toString().trim()) }
         }
         voiceButton = Button(this).apply {
-            text = "🎙 فعال‌کردن بیدارباش «یولداش»"
+            text = "🎙 فعال‌کردن بیدارباش «رادین»"
             setOnClickListener { if (wakeMode) stopWakeListening() else startWakeListening() }
         }
         dialerRoleButton = Button(this).apply {
@@ -149,7 +149,7 @@ class MainActivity : Activity() {
     private fun handleServicePhrase(phrase: String) {
         if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
+        val wakeWords = listOf("رادین", "radin", "rādin")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val wakeIndex = phrase.indexOf(wakeWord, ignoreCase = true)
@@ -267,7 +267,7 @@ class MainActivity : Activity() {
             wakeMode = true
             awaitingContactName = false
             voiceButton.text = "⏹ خاموش‌کردن بیدارباش"
-            status.text = "بیدارباش پس‌زمینه فعال شد. حتی با قفل صفحه، «یولداش» را بگویید."
+            status.text = "بیدارباش پس‌زمینه فعال شد. حتی با قفل صفحه، «رادین» را بگویید."
         } catch (_: Exception) {
             wakeMode = false
             status.text = "شروع بیدارباش ممکن نشد. مجوز میکروفون و تنظیمات باتری را بررسی کنید."
