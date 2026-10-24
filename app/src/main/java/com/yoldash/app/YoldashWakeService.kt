@@ -55,6 +55,13 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             val persian = engine.setLanguage(Locale("fa", "IR"))
             ttsReady = persian != TextToSpeech.LANG_MISSING_DATA &&
                 persian != TextToSpeech.LANG_NOT_SUPPORTED
+            // If this phone has no Persian TTS voice installed, try its default voice
+            // rather than silently disabling all spoken replies.
+            if (!ttsReady) {
+                val fallback = engine.setLanguage(Locale.getDefault())
+                ttsReady = fallback != TextToSpeech.LANG_MISSING_DATA &&
+                    fallback != TextToSpeech.LANG_NOT_SUPPORTED
+            }
         }
     }
 
@@ -164,7 +171,10 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun speak(message: String) {
-        if (ttsReady) tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "yoldash-wake")
+        val engine = tts ?: return
+        if (ttsReady) {
+            engine.speak(message, TextToSpeech.QUEUE_FLUSH, null, "yoldash-wake")
+        }
     }
 
     private fun scheduleListening(delayMs: Long) {
