@@ -102,7 +102,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
                         tailPaddings = 0
                     ),
                     tokens = "$modelDir/tiny-tokens.txt",
-                    numThreads = 2,
+                    numThreads = 4,
                     provider = "cpu",
                     modelType = "whisper"
                 )
@@ -148,8 +148,8 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         val utterance = ArrayList<Float>(sampleRate * 6)
         var speechStarted = false
         var quietSamples = 0
-        val quietLimit = sampleRate * 8 / 10
-        val maxSamples = sampleRate * 6
+        val quietLimit = sampleRate * 4 / 10
+        val maxSamples = sampleRate * 5
         try {
             recorder.startRecording()
             while (active) {
