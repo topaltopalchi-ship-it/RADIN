@@ -30,6 +30,7 @@ class YoldashWakeService : Service() {
     @Volatile private var awaitingCommand = false
     @Volatile private var serviceStopping = false
     @Volatile private var ttsReady = false
+    private val pendingSpeech = java.util.concurrent.ConcurrentLinkedQueue<String>()
     private var tts: android.speech.tts.TextToSpeech? = null
     private var voskModel: Model? = null
     private var recognizer: Recognizer? = null
@@ -43,12 +44,20 @@ class YoldashWakeService : Service() {
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
                 val engine = tts
                 if (engine != null) {
-                    val result = engine.setLanguage(Locale("fa", "IR"))
-                    if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
-                        result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
-                        Log.w(TAG, "Persian TTS unavailable.")
+                    var result = engine.setLanguage(Locale("fa", "IR"))
+                    if (result < android.speech.tts.TextToSpeech.LANG_AVAILABLE) {
+                        Log.w(TAG, "Persian TTS unavailable; falling back to device language.")
+                        result = engine.setLanguage(Locale.getDefault())
                     }
-                    ttsReady = true
+                    ttsReady = result >= android.speech.tts.TextToSpeech.LANG_AVAILABLE
+                    if (!ttsReady) {
+                        Log.e(TAG, "No usable TTS language is installed on this device.")
+                    } else {
+                        while (true) {
+                            val queued = pendingSpeech.poll() ?: break
+                            engine.speak(queued, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-queued")
+                        }
+                    }
                 }
             }
         }
@@ -207,8 +216,14 @@ class YoldashWakeService : Service() {
 
     private fun speak(message: String) {
         handler.post {
-            if (ttsReady) tts?.speak(message, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yoldash-vosk")
-            else Log.w(TAG, "TTS not ready; skipped speech: $message")
+            val engine = tts
+            if (ttsReady && engine != null) {
+                engine.speak(message, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-vosk")
+            } else {
+                // TTS initialization is asynchronous; don't silently drop startup/wake speech.
+                pendingSpeech.add(message)
+                Log.i(TAG, "Queued speech until TTS is ready: $message")
+            }
         }
     }
 
