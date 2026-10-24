@@ -89,8 +89,8 @@ class YoldashWakeService : Service() {
         )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
             else Notification.Builder(this)
-        return builder.setContentTitle("یولداش فعال است")
-            .setContentText("تشخیص گفتار فارسی آفلاین با Vosk؛ بگویید «یولداش».")
+        return builder.setContentTitle("رادین فعال است")
+            .setContentText("تشخیص گفتار فارسی آفلاین با Vosk؛ بگویید «رادین».")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openApp).setOngoing(true).build()
     }
@@ -132,7 +132,7 @@ class YoldashWakeService : Service() {
             audioRecord = recorder
             if (recorder.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("Microphone initialization failed")
             recorder.startRecording()
-            speak("یولداش فعال شد.")
+            speak("رادین فعال شد.")
             val input = ShortArray(2048)
             val bytes = ByteArray(input.size * 2)
             while (active.get() && !Thread.currentThread().isInterrupted) {
@@ -183,7 +183,7 @@ class YoldashWakeService : Service() {
 
     private fun handlePhrase(phrase: String) {
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
+        val wakeWords = listOf("رادین", "radin", "rādin")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val remainder = normalized.substringAfter(wakeWord).trim()
