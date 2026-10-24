@@ -130,8 +130,8 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             }
             val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "az-AZ")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "az-AZ")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
                 putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
