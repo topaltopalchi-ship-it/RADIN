@@ -189,7 +189,7 @@ class YoldashWakeService : Service() {
             val remainder = normalized.substringAfter(wakeWord).trim()
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
-            speak("بفرما")
+            speak("Buyur")
         } else if (awaitingCommand) {
             sendRecognizedPhrase(phrase)
             speak("باشه")
