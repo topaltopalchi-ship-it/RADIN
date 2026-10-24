@@ -85,7 +85,7 @@ class MainActivity : Activity() {
             setOnClickListener { requestDefaultDialerRole() }
         }
         status = TextView(this).apply {
-            text = "Bидارباشı aktiv edin və «Yoldaş» deyin. Sonra Azərbaycan türkcəsində danışa bilərsiniz. Proqram açıq qalmalıdır."
+            text = "برای فعال‌کردن شنود، دکمه میکروفون را بزنید و بگویید «یولداش». سپس فارسی صحبت کنید."
             textSize = 16f
             setPadding(0, 24, 0, 16)
         }
@@ -154,7 +154,7 @@ class MainActivity : Activity() {
                 searchContact(query)
             } else {
                 awaitingContactName = true
-                status.text = "Bəli, eşidirəm. İndi kontaktın adını və əmri deyin."
+                status.text = "بله، گوش می‌کنم. نام مخاطب و درخواستتان را بگویید."
             }
         } else if (awaitingContactName) {
             awaitingContactName = false
@@ -166,14 +166,14 @@ class MainActivity : Activity() {
 
     private fun extractContactQuery(command: String): String {
         var query = command.trim().trimEnd('.', ',', '!', '?')
-        val prefixes = listOf("mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ",
-            "zəhmət olmasa ", "zehmet olmasa ", "please ")
+        val prefixes = listOf("به ", "با ", "لطفاً ", "لطفا ", "شماره ", "تماس با ", "زنگ به ", "مرا به ", "mənə ", "mene ", "ya ", "xahiş edirəm ", "xahis edirem ", "zəhmət olmasa ", "zehmet olmasa ", "please ")
         prefixes.forEach { prefix ->
             if (query.lowercase(Locale.ROOT).startsWith(prefix)) {
                 query = query.substring(prefix.length).trim()
             }
         }
         val suffixes = listOf(
+            " تماس بگیر", " زنگ بزن", " زنگ بزنید", " تماس بگیرید", " رو بگیر", " را بگیر", " به من زنگ بزن", " با من تماس بگیر",
             " mənə zəng elə", " mene zəng ele", " mənə zəng et", " mene zəng et",
             " ilə zəng elə", " ile zəng ele", " ilə zəng et", " ile zəng et",
             " ilə zəng vur", " ile zəng vur", " zəng elə", " zəng ele",
@@ -237,7 +237,7 @@ class MainActivity : Activity() {
             wakeMode = true
             awaitingContactName = false
             voiceButton.text = "⏹ خاموش‌کردن بیدارباش"
-            status.text = "بیدارباش پس‌زمینه فعال شد. حتی با قفل صفحه، «یولداش» را بگویید."
+            status.text = "شنود فعال شد. فارسی صحبت کنید و برای شروع درخواست بگویید «یولداش»."
         } catch (_: Exception) {
             wakeMode = false
             status.text = "شروع بیدارباش ممکن نشد. مجوز میکروفون و تنظیمات باتری را بررسی کنید."
