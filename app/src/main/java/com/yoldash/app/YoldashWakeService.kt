@@ -30,6 +30,7 @@ class YoldashWakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val active = AtomicBoolean(false)
     @Volatile private var awaitingCommand = false
+    @Volatile private var serviceStopping = false
     @Volatile private var ttsReady = false
     private var tts: android.speech.tts.TextToSpeech? = null
     private var recognizer: OfflineRecognizer? = null
@@ -56,6 +57,8 @@ class YoldashWakeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            serviceStopping = true
+            active.set(false)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -63,6 +66,7 @@ class YoldashWakeService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        serviceStopping = false
         startForeground(NOTIFICATION_ID, buildNotification())
         if (active.compareAndSet(false, true)) {
             listenThread = thread(name = "YoldashSherpaMic") { runOfflineRecognition() }
@@ -169,6 +173,18 @@ class YoldashWakeService : Service() {
             handler.post { speak("تشخیص گفتار آفلاین راه‌اندازی نشد.") }
         } finally {
             active.set(false)
+            // Restart if recognition exits unexpectedly instead of leaving the service deaf.
+            if (!serviceStopping) {
+                handler.postDelayed({
+                    if (!serviceStopping && !active.get() &&
+                        checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        Log.w(TAG, "Restarting offline recognition after loop exit")
+                        if (active.compareAndSet(false, true)) {
+                            listenThread = thread(name = "YoldashSherpaMic") { runOfflineRecognition() }
+                        }
+                    }
+                }, 1500L)
+            }
         }
     }
 
@@ -211,7 +227,7 @@ class YoldashWakeService : Service() {
             speak("بفرما")
         } else if (awaitingCommand) {
             sendRecognizedPhrase(phrase)
-            speak("Oldu.")
+            speak("باشه")
             awaitingCommand = false
         }
     }
@@ -232,6 +248,7 @@ class YoldashWakeService : Service() {
     }
 
     override fun onDestroy() {
+        serviceStopping = true
         active.set(false)
         try { audioRecord?.stop() } catch (_: Exception) {}
         try { audioRecord?.release() } catch (_: Exception) {}
