@@ -15,6 +15,15 @@ jobs:
         run: |
           curl --fail --location --retry 3 --output app/sherpa-onnx-1.13.8.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar
           echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  app/sherpa-onnx-1.13.8.aar" | sha256sum --check
+      - name: Download multilingual Whisper tiny model for offline ASR
+        run: |
+          mkdir -p /tmp/sherpa-model app/src/main/assets/sherpa-whisper-tiny
+          curl --fail --location --retry 3 --output /tmp/whisper-tiny.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2
+          tar -xjf /tmp/whisper-tiny.tar.bz2 -C /tmp/sherpa-model
+          cp /tmp/sherpa-model/sherpa-onnx-whisper-tiny/tiny-encoder.int8.onnx app/src/main/assets/sherpa-whisper-tiny/
+          cp /tmp/sherpa-model/sherpa-onnx-whisper-tiny/tiny-decoder.int8.onnx app/src/main/assets/sherpa-whisper-tiny/
+          cp /tmp/sherpa-model/sherpa-onnx-whisper-tiny/tiny-tokens.txt app/src/main/assets/sherpa-whisper-tiny/
+          ls -lh app/src/main/assets/sherpa-whisper-tiny/
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
