@@ -21,9 +21,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.speech.tts.TextToSpeech
 import java.util.Locale
 
-class MainActivity : Activity() {
+class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var nameInput: EditText
     private lateinit var status: TextView
     private lateinit var searchButton: Button
@@ -38,12 +39,19 @@ class MainActivity : Activity() {
     }
     private var wakeMode = false
     private var awaitingContactName = false
+    private var awaitingVoiceConfirmation = false
+    private var awaitingContactChoice = false
+    private var voiceCandidates: List<Pair<String, String>> = emptyList()
+    private var pendingCallName: String? = null
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
     private val contactsPermissionRequest = 42
     private val audioPermissionRequest = 43
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        tts = TextToSpeech(this, this)
         handleDialIntent(intent)
         requestNeededPermissions()
     }
@@ -140,27 +148,87 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onInit(result: Int) {
+        if (result == TextToSpeech.SUCCESS) {
+            val engine = tts ?: return
+            val language = engine.setLanguage(Locale("fa", "IR"))
+            ttsReady = language != TextToSpeech.LANG_MISSING_DATA && language != TextToSpeech.LANG_NOT_SUPPORTED
+            if (!ttsReady) {
+                val fallback = engine.setLanguage(Locale.getDefault())
+                ttsReady = fallback != TextToSpeech.LANG_MISSING_DATA && fallback != TextToSpeech.LANG_NOT_SUPPORTED
+            }
+        }
+    }
+
+    private fun speakPersian(message: String) {
+        status.text = message
+        if (ttsReady) tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "yoldash-dialogue")
+    }
+
+    private fun normalizeSpeech(value: String): String = value.lowercase(Locale.ROOT)
+        .replace('ي', 'ی').replace('ك', 'ک').replace('‌', ' ')
+        .replace("؟", " ").replace("،", " ").replace(".", " ").replace(",", " ")
+        .replace(Regex("\\s+"), " ").trim()
+
     private fun handleServicePhrase(phrase: String) {
         if (phrase.isBlank()) return
-        val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("یولداش", "yoldash", "yoldaş", "yoldas")
-        val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
+        val normalized = normalizeSpeech(phrase)
+        if (awaitingVoiceConfirmation) {
+            when {
+                listOf("بله", "آره", "اره", "تایید", "تأیید", "بگیر", "تماس بگیر").any { normalized.contains(it) } -> {
+                    val number = pendingCallNumber
+                    val name = pendingCallName
+                    awaitingVoiceConfirmation = false
+                    pendingCallNumber = null
+                    pendingCallName = null
+                    if (number != null) {
+                        speakPersian("تأیید شد. در حال تماس با " + (name ?: "مخاطب") + " هستم.")
+                        dial(number)
+                    } else {
+                        speakPersian("شماره‌ای برای تماس آماده نیست. نام مخاطب را دوباره بگو.")
+                        awaitingContactName = true
+                    }
+                }
+                listOf("نه", "خیر", "لغو", "بیخیال", "بی خیال").any { normalized.contains(it) } -> {
+                    awaitingVoiceConfirmation = false
+                    pendingCallNumber = null
+                    pendingCallName = null
+                    speakPersian("تماس لغو شد. اگر تماس دیگری می‌خواهی نام مخاطب را بگو.")
+                    awaitingContactName = true
+                }
+                else -> speakPersian("متوجه نشدم. برای تماس بگو بله بگیر، یا برای لغو بگو نه.")
+            }
+            return
+        }
+        if (awaitingContactChoice) {
+            val choice = normalized.filter { it.isDigit() }.toIntOrNull()
+            val chosen = if (choice != null && choice in 1..voiceCandidates.size) voiceCandidates[choice - 1]
+                else voiceCandidates.firstOrNull { normalizeSpeech(it.first).contains(normalized) || normalized.contains(normalizeSpeech(it.first)) }
+            if (chosen != null) {
+                awaitingContactChoice = false
+                voiceCandidates = emptyList()
+                showContact(chosen.first, chosen.second, true)
+            } else speakPersian("متوجه نشدم. نام مخاطب یا شماره گزینه را بگو.")
+            return
+        }
+        val wakeWord = listOf("یولداش", "yoldash", "yoldaş", "yoldas").firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
-            val wakeIndex = phrase.indexOf(wakeWord, ignoreCase = true)
-            val remainder = if (wakeIndex >= 0) phrase.substring(wakeIndex + wakeWord.length).trim() else ""
+            val remainder = normalized.substringAfter(wakeWord).trim()
             if (remainder.isNotBlank()) {
-                val query = extractContactQuery(remainder)
-                nameInput.setText(query)
-                searchContact(query)
+                awaitingContactName = false
+                nameInput.setText(remainder)
+                searchContact(remainder, true)
             } else {
                 awaitingContactName = true
-                status.text = "بله، گوش می‌کنم. نام مخاطب و درخواستتان را بگویید."
+                speakPersian("بله، بفرما! نام مخاطب را بگو.")
             }
-        } else if (awaitingContactName) {
+            return
+        }
+        if (awaitingContactName) {
             awaitingContactName = false
             val query = extractContactQuery(phrase)
             nameInput.setText(query)
-            searchContact(query)
+            searchContact(query, true)
         }
     }
 
@@ -253,12 +321,16 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
         super.onDestroy()
     }
 
-    private fun searchContact(query: String) {
+    private fun searchContact(query: String, fromVoice: Boolean = false) {
         if (query.isBlank()) {
-            status.text = "لطفاً نام مخاطب را وارد کنید."
+            if (fromVoice) speakPersian("نام مخاطب را متوجه نشدم. دوباره نام را بگو.")
+            else status.text = "لطفاً نام مخاطب را وارد کنید."
             return
         }
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
@@ -316,7 +388,10 @@ class MainActivity : Activity() {
                 .thenBy { it.first.first.length })
 
         if (ranked.isEmpty()) {
-            status.text = "نام «$query» با اطمینان در مخاطبین پیدا نشد. نام را تایپ کنید یا دوباره واضح بگویید."
+            if (fromVoice) {
+                speakPersian("مخاطبی با نام " + query + " پیدا نکردم. نام را دوباره بگو.")
+                awaitingContactName = true
+            } else status.text = "نام «$query» با اطمینان در مخاطبین پیدا نشد. نام را تایپ کنید یا دوباره واضح بگویید."
             return
         }
         val bestScore = ranked.first().second
@@ -326,7 +401,12 @@ class MainActivity : Activity() {
             .take(8)
 
         if (best.size == 1 && bestScore >= 80) {
-            showContact(best.first().first, best.first().second)
+            showContact(best.first().first, best.first().second, fromVoice)
+        } else if (fromVoice) {
+            voiceCandidates = best
+            awaitingContactChoice = true
+            val options = best.mapIndexed { index, item -> "شماره ${index + 1}: ${item.first}" }.joinToString("، ")
+            speakPersian("چند مخاطب مشابه پیدا کردم. " + options + ". نام مخاطب یا شماره گزینه را بگو.")
         } else {
             val labels = best.map { "${it.first} — ${it.second}" }.toTypedArray()
             android.app.AlertDialog.Builder(this)
@@ -337,14 +417,21 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showContact(name: String, number: String) {
+    private fun showContact(name: String, number: String, fromVoice: Boolean = false) {
         status.text = "مخاطب: $name\nشماره: $number"
-        android.app.AlertDialog.Builder(this)
-            .setTitle("تأیید تماس")
-            .setMessage("با $name به شماره $number تماس گرفته شود؟")
-            .setPositiveButton("بله، باز کردن شماره‌گیر") { _, _ -> dial(number) }
-            .setNegativeButton("لغو", null)
-            .show()
+        if (fromVoice) {
+            pendingCallNumber = number
+            pendingCallName = name
+            awaitingVoiceConfirmation = true
+            speakPersian(name + " پیدا شد. می‌خواهی با این مخاطب تماس بگیرم؟ برای تأیید بگو بله بگیر، برای لغو بگو نه.")
+        } else {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("تأیید تماس")
+                .setMessage("با $name به شماره $number تماس گرفته شود؟")
+                .setPositiveButton("بله، باز کردن شماره‌گیر") { _, _ -> dial(number) }
+                .setNegativeButton("لغو", null)
+                .show()
+        }
     }
 
     private fun dial(number: String) {
