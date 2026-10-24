@@ -7,34 +7,52 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
+import android.util.Log
+import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineStream
+import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
+import java.io.File
+import java.io.FileOutputStream
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
-class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
+class YoldashWakeService : Service() {
     private val handler = Handler(Looper.getMainLooper())
-    private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private var listening = false
-    private var awaitingCommand = false
-    @Volatile private var active = true
+    private val active = AtomicBoolean(false)
+    @Volatile private var awaitingCommand = false
+    @Volatile private var ttsReady = false
+    private var tts: android.speech.tts.TextToSpeech? = null
+    private var recognizer: OfflineRecognizer? = null
+    private var audioRecord: AudioRecord? = null
+    private var listenThread: Thread? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        tts = TextToSpeech(this, this)
+        tts = android.speech.tts.TextToSpeech(this) { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                val engine = tts ?: return@TextToSpeech
+                val result = engine.setLanguage(Locale("az", "AZ"))
+                if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
+                    result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                    engine.setLanguage(Locale("tr", "TR"))
+                }
+                ttsReady = true
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        active = true
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
@@ -44,26 +62,16 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             return START_NOT_STICKY
         }
         startForeground(NOTIFICATION_ID, buildNotification())
-        if (!listening) beginRecognition()
-        return START_STICKY
-    }
-
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val engine = tts ?: return
-            val azeri = engine.setLanguage(Locale("az", "AZ"))
-            if (azeri == TextToSpeech.LANG_MISSING_DATA ||
-                azeri == TextToSpeech.LANG_NOT_SUPPORTED) {
-                engine.setLanguage(Locale("tr", "TR"))
-            }
-            ttsReady = true
+        if (active.compareAndSet(false, true)) {
+            listenThread = thread(name = "YoldashSherpaMic") { runOfflineRecognition() }
         }
+        return START_STICKY
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "Yoldash voice assistant", NotificationManager.IMPORTANCE_LOW)
-            channel.description = "Keeps Yoldash voice wake-up active while the screen is locked."
+            channel.description = "Offline Sherpa-ONNX voice wake-up."
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
@@ -77,83 +85,116 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
             else Notification.Builder(this)
         return builder.setContentTitle("یولداش فعال است")
-            .setContentText("برای بیدارکردن یولداش بگویید «یولداش»؛ لمس کنید تا برنامه باز شود.")
+            .setContentText("تشخیص گفتار آفلاین با Sherpa؛ بگویید «یولداش».")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openApp).setOngoing(true).build()
     }
 
-    private fun beginRecognition() {
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            stopSelf()
-            return
+    private fun modelFile(assetName: String): String {
+        val directory = File(filesDir, "sherpa-whisper-tiny")
+        if (!directory.exists()) directory.mkdirs()
+        val destination = File(directory, assetName)
+        if (!destination.exists() || destination.length() == 0L) {
+            assets.open("sherpa-whisper-tiny/$assetName").use { input ->
+                FileOutputStream(destination).use { output -> input.copyTo(output) }
+            }
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            speak("تشخیص گفتار در این گوشی در دسترس نیست.")
-            stopSelf()
-            return
-        }
+        return destination.absolutePath
+    }
+
+    private fun runOfflineRecognition() {
         try {
-            if (recognizer == null) {
-                recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
-                    sr.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {}
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
-                        override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) { scheduleListening(900) }
-                        override fun onResults(results: Bundle?) {
-                            val candidates = results
-                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                                .orEmpty()
-                                .map { it.trim() }
-                                .filter { it.isNotBlank() }
-                            // Recognition engines can return several hypotheses. While waiting
-                            // for the wake word, prefer a candidate that actually contains it.
-                            // For the user's contact command, keep the engine's top candidate.
-                            val wakeWords = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
-                            val phrase = if (awaitingCommand) {
-                                candidates.firstOrNull().orEmpty()
-                            } else {
-                                candidates.firstOrNull { candidate ->
-                                    val normalized = candidate.lowercase(Locale.ROOT)
-                                    wakeWords.any { normalized.contains(it) }
-                                } ?: candidates.firstOrNull().orEmpty()
-                            }
-                            handlePhrase(phrase)
-                            scheduleListening(150)
-                        }
-                        override fun onPartialResults(partialResults: Bundle?) {}
-                        override fun onEvent(eventType: Int, params: Bundle?) {}
-                    })
+            val whisper = OfflineWhisperModelConfig.builder()
+                .setEncoder(modelFile("tiny-encoder.int8.onnx"))
+                .setDecoder(modelFile("tiny-decoder.int8.onnx"))
+                .setLanguage("az")
+                .setTask("transcribe")
+                .setTailPaddings(0)
+                .build()
+            val model = OfflineModelConfig.builder()
+                .setWhisper(whisper)
+                .setTokens(modelFile("tiny-tokens.txt"))
+                .setNumThreads(4)
+                .setProvider("cpu")
+                .build()
+            val config = OfflineRecognizerConfig.builder()
+                .setOfflineModelConfig(model)
+                .setDecodingMethod("greedy_search")
+                .build()
+            recognizer = OfflineRecognizer(config)
+
+            val sampleRate = 16000
+            val minBuffer = AudioRecord.getMinBufferSize(
+                sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+            )
+            if (minBuffer <= 0) throw IllegalStateException("AudioRecord buffer unavailable: $minBuffer")
+            val recorder = AudioRecord(
+                MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, sampleRate * 2)
+            )
+            audioRecord = recorder
+            if (recorder.state != AudioRecord.STATE_INITIALIZED) throw IllegalStateException("Microphone initialization failed")
+            recorder.startRecording()
+            speak("یولداش فعال شد.")
+            val chunkSamples = sampleRate * 3
+            val input = ShortArray(2048)
+            val chunk = ShortArray(chunkSamples)
+            var filled = 0
+            while (active.get() && !Thread.currentThread().isInterrupted) {
+                val count = recorder.read(input, 0, input.size)
+                if (count <= 0) {
+                    Log.w(TAG, "AudioRecord read returned $count")
+                    continue
+                }
+                var offset = 0
+                while (offset < count) {
+                    val copyCount = minOf(count - offset, chunkSamples - filled)
+                    System.arraycopy(input, offset, chunk, filled, copyCount)
+                    filled += copyCount
+                    offset += copyCount
+                    if (filled == chunkSamples) {
+                        decodeChunk(chunk, sampleRate)
+                        filled = 0
+                    }
                 }
             }
-            val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
-                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            try { recorder.stop() } catch (_: Exception) {}
+            recorder.release()
+            audioRecord = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Sherpa offline recognition failed", e)
+            handler.post { speak("تشخیص گفتار آفلاین راه‌اندازی نشد.") }
+        } finally {
+            active.set(false)
+        }
+    }
+
+    private fun decodeChunk(pcm: ShortArray, sampleRate: Int) {
+        val engine = recognizer ?: return
+        val samples = FloatArray(pcm.size) { pcm[it] / 32768.0f }
+        var stream: OfflineStream? = null
+        try {
+            stream = engine.createStream()
+            stream.acceptWaveform(samples, sampleRate)
+            engine.decode(stream)
+            val phrase = engine.getResult(stream).getText().trim()
+            if (phrase.isNotBlank()) {
+                Log.d(TAG, "Sherpa heard: $phrase")
+                handlePhrase(phrase)
             }
-            recognizer?.startListening(speechIntent)
-            listening = true
-        } catch (_: Exception) {
-            listening = false
-            scheduleListening(1500)
+        } catch (e: Exception) {
+            Log.e(TAG, "Sherpa decode error", e)
+        } finally {
+            stream?.release()
         }
     }
 
     private fun handlePhrase(phrase: String) {
-        if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wake = listOf("yoldaş", "yoldash", "yoldas", "یولداش").any { normalized.contains(it) }
-        if (wake) {
-            val wakeWord = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
-                .firstOrNull { normalized.contains(it) }
-            val remainder = wakeWord?.let { normalized.substringAfter(it).trim() }.orEmpty()
-            // If the user says the wake word and the command in one sentence,
-            // do not leave the service waiting for an extra command.
+        val wakeWords = listOf("yoldaş", "yoldash", "yoldas", "یولداش", "یولداش")
+        val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
+        if (wakeWord != null) {
+            val remainder = normalized.substringAfter(wakeWord).trim()
             awaitingCommand = remainder.isBlank()
             sendRecognizedPhrase(phrase)
             speak("Buyur.")
@@ -173,19 +214,19 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun speak(message: String) {
-        if (ttsReady) tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "yoldash-wake")
-    }
-
-    private fun scheduleListening(delayMs: Long) {
-        listening = false
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({ if (active) beginRecognition() }, delayMs)
+        handler.post {
+            if (ttsReady) tts?.speak(message, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "yoldash-sherpa")
+            else Log.w(TAG, "TTS not ready; skipped speech: $message")
+        }
     }
 
     override fun onDestroy() {
-        active = false
-        handler.removeCallbacksAndMessages(null)
-        try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
+        active.set(false)
+        try { audioRecord?.stop() } catch (_: Exception) {}
+        try { audioRecord?.release() } catch (_: Exception) {}
+        audioRecord = null
+        try { listenThread?.interrupt() } catch (_: Exception) {}
+        recognizer?.release()
         recognizer = null
         tts?.stop()
         tts?.shutdown()
@@ -202,5 +243,6 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_PHRASE = "com.yoldash.app.extra.PHRASE"
         private const val CHANNEL_ID = "yoldash_wake_service"
         private const val NOTIFICATION_ID = 601
+        private const val TAG = "YoldashSherpa"
     }
 }
