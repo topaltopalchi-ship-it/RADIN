@@ -46,7 +46,7 @@ class YoldashWakeService : Service() {
                     val result = engine.setLanguage(Locale("az", "AZ"))
                     if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA ||
                         result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
-                        engine.setLanguage(Locale("tr", "TR"))
+                        Log.w(TAG, "Azerbaijani TTS is unavailable; Turkish fallback is disabled.")
                     }
                     ttsReady = true
                 }
