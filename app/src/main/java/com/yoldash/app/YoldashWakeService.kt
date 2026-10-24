@@ -55,7 +55,7 @@ class YoldashWakeService : Service() {
                     } else {
                         while (true) {
                             val queued = pendingSpeech.poll() ?: break
-                            engine.speak(queued, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-queued")
+                            engine.speak(if (queued == "Buyur") "بویور" else queued, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-queued")
                         }
                     }
                 }
@@ -192,7 +192,7 @@ class YoldashWakeService : Service() {
 
     private fun handlePhrase(phrase: String) {
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wakeWords = listOf("رادین", "radin", "rādin")
+        val wakeWords = listOf("رادین", "رادين", "رادیم", "رامین", "radin", "rādin", "ramin")
         val wakeWord = wakeWords.firstOrNull { normalized.contains(it) }
         if (wakeWord != null) {
             val remainder = normalized.substringAfter(wakeWord).trim()
@@ -218,7 +218,7 @@ class YoldashWakeService : Service() {
         handler.post {
             val engine = tts
             if (ttsReady && engine != null) {
-                engine.speak(message, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-vosk")
+                engine.speak(if (message == "Buyur") "بویور" else message, android.speech.tts.TextToSpeech.QUEUE_ADD, null, "radin-vosk")
             } else {
                 // TTS initialization is asynchronous; don't silently drop startup/wake speech.
                 pendingSpeech.add(message)
