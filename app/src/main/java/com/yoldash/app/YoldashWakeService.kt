@@ -113,7 +113,7 @@ class YoldashWakeService : Service() {
             val whisper = OfflineWhisperModelConfig(
                 encoder = modelFile("tiny-encoder.int8.onnx"),
                 decoder = modelFile("tiny-decoder.int8.onnx"),
-                language = "az",
+                language = "fa",
                 task = "transcribe",
                 tailPaddings = 0
             )
