@@ -25,6 +25,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private var ttsReady = false
     private var listening = false
     private var awaitingCommand = false
+    private var consecutiveRecognitionErrors = 0
     @Volatile private var active = true
 
     override fun onCreate() {
@@ -98,8 +99,17 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
                         override fun onRmsChanged(rmsdB: Float) {}
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) { scheduleListening(3000) }
+                        override fun onError(error: Int) {
+                            consecutiveRecognitionErrors++
+                            if (consecutiveRecognitionErrors >= 3) {
+                                listening = false
+                                stopSelf()
+                            } else {
+                                scheduleListening(3000L * consecutiveRecognitionErrors)
+                            }
+                        }
                         override fun onResults(results: Bundle?) {
+                            consecutiveRecognitionErrors = 0
                             val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                             handlePhrase(phrase)
                             scheduleListening(1800)
