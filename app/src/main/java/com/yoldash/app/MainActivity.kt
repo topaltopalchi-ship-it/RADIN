@@ -157,7 +157,7 @@ class MainActivity : Activity() {
             if (remainder.isNotBlank()) {
                 val query = extractContactQuery(remainder)
                 nameInput.setText(query)
-                searchContact(query)
+                searchContact(query, callImmediately = true)
             } else {
                 awaitingContactName = true
                 status.text = "Bəli, eşidirəm. İndi kontaktın adını və əmri deyin."
@@ -166,7 +166,7 @@ class MainActivity : Activity() {
             awaitingContactName = false
             val query = extractContactQuery(phrase)
             nameInput.setText(query)
-            searchContact(query)
+            searchContact(query, callImmediately = true)
         }
     }
 
@@ -186,7 +186,7 @@ class MainActivity : Activity() {
             " zəng at", " zəng et", " zəng vur", " zəng edin", " zəng eləyin",
             " zəng eleyn", " telefon et", " zənglə", " zəngle", " arayın",
             " arayin", " ara", " tut mənə", " tut mene", " zəng etsin",
-            " call", " telefon aç", " telefon ac", " yığ", " yig"
+            " زنگ بزن", " تماس بگیر", " تماس بزن", " call", " telefon aç", " telefon ac", " yığ", " yig"
         )
         var changed = true
         while (changed) {
@@ -286,7 +286,7 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun searchContact(query: String) {
+    private fun searchContact(query: String, callImmediately: Boolean = false) {
         if (query.isBlank()) {
             status.text = "لطفاً نام مخاطب را وارد کنید."
             return
@@ -356,19 +356,23 @@ class MainActivity : Activity() {
             .take(8)
 
         if (best.size == 1 && bestScore >= 80) {
-            showContact(best.first().first, best.first().second)
+            showContact(best.first().first, best.first().second, callImmediately)
         } else {
             val labels = best.map { "${it.first} — ${it.second}" }.toTypedArray()
             android.app.AlertDialog.Builder(this)
                 .setTitle("لطفاً مخاطب را تأیید کن")
-                .setItems(labels) { _, which -> showContact(best[which].first, best[which].second) }
+                .setItems(labels) { _, which -> showContact(best[which].first, best[which].second, callImmediately) }
                 .setNegativeButton("لغو", null)
                 .show()
         }
     }
 
-    private fun showContact(name: String, number: String) {
+    private fun showContact(name: String, number: String, callImmediately: Boolean = false) {
         status.text = "مخاطب: $name\nشماره: $number"
+        if (callImmediately) {
+            directCall(number)
+            return
+        }
         android.app.AlertDialog.Builder(this)
             .setTitle("تأیید تماس")
             .setMessage("با $name به شماره $number تماس گرفته شود؟")
@@ -377,6 +381,19 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun directCall(number: String) {
+        if (checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            pendingCallNumber = number
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 46)
+            status.text = "شماره: $number\nبرای تماس، اجازهٔ تماس را تأیید کنید."
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(number))))
+        } catch (_: Exception) {
+            status.text = "شماره پیدا شد: $number\nتماس شروع نشد؛ اجازهٔ تماس را بررسی کنید."
+        }
+    }
     private fun dial(number: String) {
         try {
             val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
@@ -411,6 +428,14 @@ class MainActivity : Activity() {
                 dial(number)
             } else {
                 status.text = "برای شروع تماس از داخل یولداش، اجازه تماس لازم است."
+            }
+        } else if (requestCode == 46) {
+            val number = pendingCallNumber
+            pendingCallNumber = null
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED && number != null) {
+                directCall(number)
+            } else {
+                status.text = "شماره پیدا شد، اما برای تماس مستقیم اجازهٔ تماس لازم است."
             }
         } else if (requestCode == 44) {
             val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
