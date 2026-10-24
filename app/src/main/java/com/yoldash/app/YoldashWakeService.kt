@@ -98,11 +98,11 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
                         override fun onRmsChanged(rmsdB: Float) {}
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) { scheduleListening(900) }
+                        override fun onError(error: Int) { scheduleListening(3000) }
                         override fun onResults(results: Bundle?) {
                             val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                             handlePhrase(phrase)
-                            scheduleListening(400)
+                            scheduleListening(1800)
                         }
                         override fun onPartialResults(partialResults: Bundle?) {}
                         override fun onEvent(eventType: Int, params: Bundle?) {}
