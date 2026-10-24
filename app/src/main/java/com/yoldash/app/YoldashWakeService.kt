@@ -54,6 +54,12 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             val persian = engine.setLanguage(Locale("fa", "IR"))
             ttsReady = persian != TextToSpeech.LANG_MISSING_DATA &&
                 persian != TextToSpeech.LANG_NOT_SUPPORTED
+            // Keep spoken feedback audible on phones that lack a Persian TTS voice.
+            if (!ttsReady) {
+                val fallback = engine.setLanguage(Locale.getDefault())
+                ttsReady = fallback != TextToSpeech.LANG_MISSING_DATA &&
+                    fallback != TextToSpeech.LANG_NOT_SUPPORTED
+            }
         }
     }
 
@@ -65,7 +71,12 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun buildNotification(): Notification {
+    private fun updateNotification(message: String) {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildNotification(message))
+    }
+
+    private fun buildNotification(message: String? = null): Notification {
         val openApp = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or
@@ -74,7 +85,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
             else Notification.Builder(this)
         return builder.setContentTitle("یولداش فعال است")
-            .setContentText("برای بیدارکردن یولداش بگویید «یولداش»؛ لمس کنید تا برنامه باز شود.")
+            .setContentText(message ?: "برای بیدارکردن یولداش بگویید «یولداش»؛ لمس کنید تا برنامه باز شود.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(openApp).setOngoing(true).build()
     }
@@ -93,12 +104,25 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
             if (recognizer == null) {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
                     sr.setRecognitionListener(object : RecognitionListener {
-                        override fun onReadyForSpeech(params: Bundle?) {}
+                        override fun onReadyForSpeech(params: Bundle?) {
+                            updateNotification("شنود آماده است؛ واژهٔ «یولداش» را بگویید.")
+                        }
                         override fun onBeginningOfSpeech() {}
                         override fun onRmsChanged(rmsdB: Float) {}
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() {}
-                        override fun onError(error: Int) { scheduleListening(900) }
+                        override fun onError(error: Int) {
+                            updateNotification(when (error) {
+                                SpeechRecognizer.ERROR_AUDIO -> "خطای میکروفون؛ دسترسی و برنامه‌های استفاده‌کننده از میکروفون را بررسی کنید."
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "اجازهٔ میکروفون داده نشده است."
+                                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "تشخیص گفتار به شبکه نیاز دارد یا اتصال در دسترس نیست."
+                                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
+                                    "زبان فارسی در سرویس تشخیص گفتار گوشی در دسترس نیست."
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "سرویس تشخیص گفتار مشغول است؛ دوباره تلاش می‌کنم."
+                                else -> "گفتار تشخیص داده نشد؛ دوباره «یولداش» را واضح بگویید."
+                            })
+                            scheduleListening(1200)
+                        }
                         override fun onResults(results: Bundle?) {
                             val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
                             handlePhrase(phrase)
@@ -128,7 +152,7 @@ class YoldashWakeService : Service(), TextToSpeech.OnInitListener {
     private fun handlePhrase(phrase: String) {
         if (phrase.isBlank()) return
         val normalized = phrase.lowercase(Locale.ROOT)
-        val wake = listOf("یولداش", "یولداش", "yoldash", "yoldaş", "yoldas").any { normalized.contains(it) }
+        val wake = listOf("یولداش", "yoldash", "yoldaş", "yoldas", "yol daş", "یولداش").any { normalized.contains(it) }
         if (wake) {
             val wakeWord = listOf("yoldaş", "yoldash", "yoldas", "یولداش")
                 .firstOrNull { normalized.contains(it) }
